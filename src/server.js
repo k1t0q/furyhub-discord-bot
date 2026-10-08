@@ -82,15 +82,25 @@ const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow
 const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, protect_updated: 0xe2a13a, raids: 0xb32932, tasks: 0x458ac9, stash: 0xd69d41, presence: 0x458ac9, posts: 0x458ac9 };
 const protectClock = value => new Date(value).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
 async function protectDMContent(event) {
-  const rows = await db('protect_updates',{query:'?squad_id=eq.'+event.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
+  const key = String(event.source_key || '');
+  let protectId = null;
+  if (/^protect-updated:\\d+$/.test(key)) protectId = key.split(':')[1];
+  if (/^protect-time-edited:\\d+$/.test(key)) {
+    const edits = await db('protect_update_edits',{query:'?id=eq.'+key.split(':')[1]+'&select=protect_update_id&limit=1'});
+    protectId = edits[0]?.protect_update_id || null;
+  }
+  const query = protectId
+    ? '?id=eq.'+protectId+'&squad_id=eq.'+event.squad_id+'&select=updated_at,effective_at,member_id&limit=1'
+    : '?squad_id=eq.'+event.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1';
+  const rows = await db('protect_updates',{query});
   const last = rows[0];
   if (!last) return null;
   const authors = last.member_id ? await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}) : [];
   const base = new Date(last.effective_at || last.updated_at);
   if (!Number.isFinite(base.getTime())) return null;
   return {
-    title: 'ПРОТЕКТ',
-    description: 'Последнее обновление:\n**'+(authors[0]?.nick || 'Участник')+' · '+protectClock(base)+'**\nНачало: **'+protectClock(base.getTime()+3600000)+'**\nСпадёт: **'+protectClock(base.getTime()+32400000)+'**'
+    title: 'Протект обновлён',
+    description: '**'+(authors[0]?.nick || 'Участник')+' · '+protectClock(base)+'** обновил протект базы:\nНачало: **'+protectClock(base.getTime()+3600000)+'**\nСпадёт: **'+protectClock(base.getTime()+32400000)+'**'
   };
 }
 async function sendDiscordDM(userId, event) {
@@ -134,7 +144,7 @@ async function processDiscordNotifications() {
   discordDmPolling = true;
   const stats = { events: 0, links: 0, enabled: 0, candidates: 0, claimed: 0, sent: 0, failed: 0, ignoredActor: 0, ignoredCategory: 0, ignoredSquad: 0, unclaimed: 0 };
   try {
-    const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
+    const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
     stats.events = events.length;
     if (!events.length) return;
     const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
