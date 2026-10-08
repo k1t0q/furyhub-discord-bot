@@ -285,7 +285,7 @@ async function handle(interaction) {
     const damage=(stock.get('С4')||0)*400+(stock.get('РПГ')||0)*200+(stock.get('ГРАНАТА')||0)*100+(stock.get('ДИНАМИТ')||0)*200;
     const walls=Math.floor(damage/1200);
     const word=(n)=>{const m=n%100,a=n%10;return m>=11&&m<=14?'СТЕН':a===1?'СТЕНУ':a>=2&&a<=4?'СТЕНЫ':'СТЕН';};
-    return ephem('**ВЗРЫВ · ЗАПАСЫ**\n'+lines.join('\n')+'\n\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.',[row({type:2,style:5,label:'ПЕРЕЙТИ К ВЗРЫВУ ↗',url:homepage.replace(/\/$/,'')+'/?section=explosives'})]);
+    return ephem('**ВЗРЫВ · ЗАПАСЫ**\n'+lines.join('\n')+'\n\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**',[row({type:2,style:5,label:'ПЕРЕЙТИ К ВЗРЫВУ ↗',url:homepage.replace(/\/$/,'')+'/?section=explosives'})]);
   }
   if (section==='alarm') {
     if(action==='confirm') {
