@@ -10,13 +10,13 @@ const json = (res, status, payload) => {
   res.end(JSON.stringify(payload));
 };
 const button = (label, id, style = 2) => ({ type: 2, style, label, custom_id: id });
-const panel = () => ({
+const panel = (publicPost = false) => ({
   type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
   data: {
-    flags: 64,
+    ...(publicPost ? {} : { flags: 64 }),
     embeds: [{
       title: 'SCUM HUB  |  ДУБЛЬ',
-      description: '**Центр управления отрядом**\\nУчастие, протект, рейды и задачи — в одном месте.',
+      description: '**Центр управления отрядом**\nУчастие, протект, рейды и задачи — в одном месте.',
       color: 0xb32932,
       fields: [
         { name: 'Управление', value: 'Выбери нужный раздел с помощью кнопок ниже.' },
@@ -38,6 +38,13 @@ function response(interaction) {
     return { type: 4, data: { flags: 64, content: 'Бот пока доступен только на тестовом сервере.' } };
   }
   if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'fury') return panel();
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'setup') {
+    const permissions = BigInt(interaction.member?.permissions || '0');
+    if ((permissions & 0x8n) === 0n && (permissions & 0x20n) === 0n) {
+      return { type: 4, data: { flags: 64, content: 'Для публикации панели нужны права администратора или управления сервером.' } };
+    }
+    return panel(true);
+  }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id || '').startsWith('fury:')) {
     const labels = { presence: 'Моё участие', protect: 'Протект', raids: 'Рейды', tasks: 'Задачи', explosives: 'ВЗРЫВ', alarm: 'Нас рейдят' };
     const section = String(interaction.data.custom_id).split(':')[1];
@@ -61,9 +68,9 @@ async function registerGuildCommand() {
   try {
     const url = `https://discord.com/api/v10/applications/${encodeURIComponent(appId)}/guilds/${encodeURIComponent(guildId)}/commands`;
     const result = await fetch(url, {
-      method: 'POST',
+      method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'fury', description: 'Открыть панель управления FURY HUB', type: 1 }),
+      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
@@ -71,7 +78,7 @@ async function registerGuildCommand() {
       console.error('[discord] /fury registration failed', { status: result.status, detail: detail.slice(0, 500) });
       return;
     }
-    console.log('[discord] /fury guild command registered successfully');
+    console.log('[discord] /fury and /setup guild commands registered successfully');
   } catch (error) {
     console.error('[discord] /fury registration request failed', error?.message || 'Unknown error');
   }
