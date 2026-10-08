@@ -80,6 +80,19 @@ const moscowDay = () => { const parts = Object.fromEntries(new Intl.DateTimeForm
 const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
 const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, protect_updated: 0xe2a13a, raids: 0xb32932, tasks: 0x458ac9, stash: 0xd69d41, presence: 0x458ac9, posts: 0x458ac9 };
+const protectClock = value => new Date(value).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+async function protectDMContent(event) {
+  const rows = await db('protect_updates',{query:'?squad_id=eq.'+event.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
+  const last = rows[0];
+  if (!last) return null;
+  const authors = last.member_id ? await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}) : [];
+  const base = new Date(last.effective_at || last.updated_at);
+  if (!Number.isFinite(base.getTime())) return null;
+  return {
+    title: 'ПРОТЕКТ',
+    description: 'Последнее обновление:\n**'+(authors[0]?.nick || 'Участник')+' · '+protectClock(base)+'**\nНачало: **'+protectClock(base.getTime()+3600000)+'**\nСпадёт: **'+protectClock(base.getTime()+32400000)+'**'
+  };
+}
 async function sendDiscordDM(userId, event) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw Error('Bot token missing');
@@ -90,10 +103,11 @@ async function sendDiscordDM(userId, event) {
   if (!channel.ok) throw Error('Cannot open DM (' + channel.status + ')');
   const { id } = await channel.json();
   const category = String(event.category || 'general').toLowerCase();
+  const protect = category === 'protect_updated' ? await protectDMContent(event) : null;
   const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
     method: 'POST', headers,
     body: JSON.stringify({
-      embeds: [{ title: String(event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      embeds: [{ title: String(protect?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
       components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Открыть ДУБЛЬ', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
