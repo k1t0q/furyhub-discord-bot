@@ -15,14 +15,14 @@ const panel = (publicPost = false) => ({
   data: {
     ...(publicPost ? {} : { flags: 64 }),
     embeds: [{
-      author: { name: 'ДУБЛЬ  /  SQUAD CONTROL' },
+      author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
-      description: '**Панель управления отрядом**\nВыбери раздел ниже. Все данные синхронизируются с ДУБЛЬ.',
+      description: '**Управление отрядом в Discord**\nАктуальные данные из ДУБЛЬ. Выбери нужный раздел ниже.',
       color: 0xb32932,
       fields: [
-        { name: '01  ·  ОТРЯД', value: 'Моё участие и протект.', inline: false },
-        { name: '02  ·  ОПЕРАЦИИ', value: 'Рейды, задачи и запасы взрывчатки.', inline: false },
-        { name: '03  ·  ТРЕВОГА', value: 'Экстренное оповещение отряда.', inline: false }
+        { name: 'СОСТАВ И ПРОТЕКТ', value: 'Отметки участников и время защиты базы.', inline: false },
+        { name: 'РЕЙДЫ И РЕСУРСЫ', value: 'Планы рейдов, задачи и запасы взрывчатки.', inline: false },
+        { name: 'ЭКСТРЕННАЯ ТРЕВОГА', value: 'Кнопка «НАС РЕЙДЯТ» для срочного оповещения.', inline: false }
       ],
       footer: { text: process.env.DISCORD_TEST_MODE === 'false' ? 'SCUM HUB · синхронизация с ДУБЛЬ' : 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
