@@ -137,7 +137,7 @@ async function handle(interaction) {
     if (!apiReady()) return ephem('**SCUM HUB · диагностика**\nSupabase: переменные отсутствуют.');
     try {
       await db('members', { query: '?select=id&limit=1' });
-      return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: подключён (запрос выполнен)\nИзменение данных: отключено\nЛичные уведомления: отключены');
+      return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: подключён (запрос выполнен)\nИзменение данных: '+(process.env.DISCORD_TEST_MODE === 'false' ? 'разрешено' : 'тестовый режим')+'\nЛичные уведомления: '+(process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT || '')) ? 'включены' : 'отключены'));
     } catch (error) {
       return ephem('**SCUM HUB · диагностика**\nSupabase: ошибка соединения (' + String(error.message).slice(0,100) + ')');
     }
