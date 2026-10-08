@@ -95,7 +95,9 @@ async function sendDiscordDM(userId, event) {
 }
 async function processDiscordNotifications() {
   if (!apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_DM_NOTIFICATIONS !== 'true' || process.env.DISCORD_TEST_MODE !== 'false') return;
-  const events = await db('squad_notification_events',{query:'?select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
+  const launchAt = process.env.DISCORD_DM_START_AT;
+  if (!launchAt || !Number.isFinite(Date.parse(launchAt))) return;
+  const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
   if (!events.length) return;
   const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
   const members = await db('members',{query:'?select=id,squad_id'});
@@ -105,7 +107,7 @@ async function processDiscordNotifications() {
       const member = members.find(x=>x.id===link.member_id);
       if (!member || member.squad_id!==event.squad_id || member.id===event.actor_id) continue;
       const pref = prefs.find(x=>x.member_id===member.id);
-      if (pref?.enabled===false || pref?.categories?.[event.category]===false) continue;
+      if (!pref || pref.enabled !== true || pref.categories?.[event.category] !== true) continue;
       const key = '?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id+'&select=status,attempts,updated_at';
       const previous = await db('discord_dm_deliveries',{query:key});
       if (previous[0]?.status==='sent' || previous[0]?.status==='failed' || previous[0]?.status==='pending') continue;
