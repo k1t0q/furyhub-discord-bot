@@ -277,11 +277,43 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
-    const reply = await handle(interaction);
-    console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null, responseType: reply.type, responseData: interaction.type === InteractionType.PING ? JSON.stringify(reply) : undefined });
-    return json(res, 200, reply);
+    const isDeferred = interaction.type === InteractionType.MESSAGE_COMPONENT ||
+      (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
+    if (!isDeferred) {
+      const reply = await handle(interaction);
+      return json(res, 200, reply);
+    }
+    // Acknowledge within Discord's 3-second deadline before any database request.
+    const appId = process.env.DISCORD_APPLICATION_ID;
+    const token = interaction.token;
+    if (!appId || !token) return json(res, 200, ephem('Интеграция не настроена: отсутствует ID приложения.'));
+    json(res, 200, { type: 5, data: { flags: 64 } });
+    void (async () => {
+      let reply;
+      try {
+        reply = await handle(interaction);
+      } catch (error) {
+        console.error('[discord] deferred interaction failed:', error?.message || 'Unknown error');
+        reply = ephem('Не удалось выполнить действие. Попробуй позже.');
+      }
+      const data = reply?.data || { content: 'Не удалось получить ответ.' };
+      try {
+        const url = 'https://discord.com/api/v10/webhooks/' + encodeURIComponent(appId) + '/' + encodeURIComponent(token) + '/messages/@original';
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: data.content || '', embeds: data.embeds || [], components: data.components || [] }),
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!response.ok) console.error('[discord] deferred response failed:', response.status);
+      } catch (error) {
+        console.error('[discord] deferred response transport:', error?.message || 'Unknown error');
+      }
+    })();
+  } catch (error) {
+    console.error('Interaction error', error?.message || 'Unknown error');
+    return json(res, 200, ephem('Ошибка обработки команды.'));
   }
-  catch (error) { console.error('Interaction error', error?.message || 'Unknown error'); return json(res, 200, ephem('Не удалось выполнить действие. Проверь логи бота или попробуй позже.')); }
 }).listen(port, '0.0.0.0', () => {
   console.log('FURY HUB Discord interactions listening on port', port);
   void registerGuildCommand();
