@@ -231,8 +231,27 @@ async function handle(interaction) {
       if (!updatedTasks.length) return ephem('Задачу уже забрал другой участник. Обнови список.');
       return ephem('Задача взята в работу.');
     }
-    const tasks=(await db('tasks',{query:squad+'&select=id,title,status,assignee_id,deadline&order=created_at.desc&limit=100'})).filter(taskActive).slice(0,8);
-    return ephem('**Активные задачи**\n'+(tasks.map(x=>'#'+x.id+' · '+x.title+' · '+(x.status||'В работе')).join('\n')||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
+    const tasks=(await db('tasks',{query:squad+'&select=id,title,status,assignee_id,creator_id,quantity,unit,deadline&order=created_at.desc&limit=100'})).filter(taskActive).slice(0,8);
+    const [members,contributions]=await Promise.all([
+      db('members',{query:squad+'&select=id,nick'}),
+      db('task_contributions',{query:'?select=task_id,amount&task_id=in.('+ (tasks.map(t=>t.id).join(',')||'0') +')'})
+    ]);
+    const names=new Map(members.map(x=>[x.id,x.nick]));
+    const collected=new Map();
+    for(const c of contributions)collected.set(c.task_id,(collected.get(c.task_id)||0)+Number(c.amount||0));
+    const unitLabel=(n,u)=>{
+      if(String(u||'').toLowerCase()==='стак'){
+        const a=Math.abs(n)%100,b=a%10;
+        return a>=11&&a<=14?'стаков':b===1?'стак':b>=2&&b<=4?'стака':'стаков';
+      }
+      return u||'шт.';
+    };
+    const description=tasks.map(t=>{
+      const need=Number(t.quantity||0),done=collected.get(t.id)||0;
+      const deadline=String(t.deadline||'').trim().replace('T',' ').slice(0,16);
+      return '**#'+t.id+' · '+t.title+'**\\nСоздал: **'+(names.get(t.creator_id)||'Не указан')+'**\\nНужно: '+need+' '+unitLabel(need,t.unit)+' · Собрано: '+done+' '+unitLabel(done,t.unit)+'\\nДо: '+(deadline||'Не указан');
+    }).join('\\n\\n');
+    return ephem('**Активные задачи**\\n\\n'+(description||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
   }
   if (section==='explosives') {
     const items=await db('explosives_inventory',{query:squad+'&select=item,quantity&order=item.asc'});
