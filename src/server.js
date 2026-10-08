@@ -73,7 +73,7 @@ const admin = m => ['admin','owner','leader'].includes(String(m?.access_role || 
 const moscowDay = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).filter(p => p.type !== 'literal').map(p => [p.type, p.value])); return `${parts.year}-${parts.month}-${parts.day}`; };
 const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
-const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, raid: 0xb32932, task: 0x458ac9, stash: 0xd69d41 };
+const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, protect_updated: 0xe2a13a, raids: 0xb32932, tasks: 0x458ac9, stash: 0xd69d41, presence: 0x458ac9, posts: 0x458ac9 };
 async function sendDiscordDM(userId, event) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw Error('Bot token missing');
