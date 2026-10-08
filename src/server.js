@@ -171,7 +171,7 @@ async function handle(interaction) {
     if (['Буду','Под вопросом','Не буду'].includes(action)) {
       const date = moscowDay();
       const old = await db('presence_history',{query:'?member_id=eq.'+m.id+'&day=eq.'+date+'&select=join_time'});
-      await db('presence_history',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id,day:date,status:action,join_time:action==='Буду'?(old[0]?.join_time||null):null,updated_at:new Date().toISOString()}});
+      await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:m.squad_id,member_id:m.id,day:date,status:action,join_time:action==='Буду'?(old[0]?.join_time||null):null,updated_at:new Date().toISOString()}});
       return ephem('Статус обновлён: **'+action+'**. Время захода можно уточнить на сайте.');
     }
     const today=await db('presence_history',{query:squad+'&day=eq.'+moscowDay()+'&select=member_id,status,join_time'});
