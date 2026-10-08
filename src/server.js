@@ -161,7 +161,7 @@ async function handle(interaction) {
   const m = await linked(interaction);
   if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
   const [,section,action] = interaction.data.custom_id.split(':');
-  if (action) return ephem('Изменение данных пока отключено до завершения тестирования. Просмотр доступен.');
+  if (action && process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных пока отключено.');
   const squad = '?squad_id=eq.' + m.squad_id;
   if (section === 'presence') {
     if (['Буду','Под вопросом','Не буду'].includes(action)) {
