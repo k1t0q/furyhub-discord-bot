@@ -103,6 +103,12 @@ async function protectDMContent(event) {
     description: '**'+(authors[0]?.nick || 'Участник')+' · '+protectClock(base)+'** обновил протект базы:\nНачало: **'+protectClock(base.getTime()+3600000)+'**\nСпадёт: **'+protectClock(base.getTime()+32400000)+'**'
   };
 }
+async function taskDMContent(event) {
+  if (event.title !== 'Новая задача') return null;
+  const authors = event.actor_id ? await db('members',{query:'?id=eq.'+event.actor_id+'&select=nick&limit=1'}) : [];
+  const author = authors[0]?.nick || 'Участник';
+  return { title:'Новая задача', description:'**'+author+'** добавил новую задачу:\n**'+String(event.body || 'Без названия').slice(0,3500)+'**' };
+}
 async function sendDiscordDM(userId, event) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw Error('Bot token missing');
@@ -114,10 +120,11 @@ async function sendDiscordDM(userId, event) {
   const { id } = await channel.json();
   const category = String(event.category || 'general').toLowerCase();
   const protect = category === 'protect_updated' ? await protectDMContent(event) : null;
+  const task = category === 'tasks' ? await taskDMContent(event) : null;
   const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
     method: 'POST', headers,
     body: JSON.stringify({
-      embeds: [{ title: String(protect?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      embeds: [{ title: String(protect?.title || task?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
       components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Открыть ДУБЛЬ', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
