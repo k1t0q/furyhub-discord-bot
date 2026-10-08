@@ -102,34 +102,62 @@ async function sendDiscordDM(userId, event) {
 let discordDmPolling = false;
 async function processDiscordNotifications() {
   if (discordDmPolling) return;
-  if (!apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_DM_NOTIFICATIONS !== 'true' || process.env.DISCORD_TEST_MODE !== 'false') return;
+  const blockers = [
+    !apiReady() && 'Supabase not configured',
+    !process.env.DISCORD_BOT_TOKEN && 'bot token missing',
+    process.env.DISCORD_DM_NOTIFICATIONS !== 'true' && 'notifications disabled',
+    process.env.DISCORD_TEST_MODE !== 'false' && 'test mode enabled'
+  ].filter(Boolean);
+  if (blockers.length) {
+    console.warn('[discord] DM skipped:', blockers.join(', '));
+    return;
+  }
   const launchAt = process.env.DISCORD_DM_START_AT;
-  if (!launchAt || !Number.isFinite(Date.parse(launchAt))) return;
+  if (!launchAt || !Number.isFinite(Date.parse(launchAt))) {
+    console.warn('[discord] DM skipped: invalid DISCORD_DM_START_AT');
+    return;
+  }
   discordDmPolling = true;
+  const stats = { events: 0, links: 0, enabled: 0, candidates: 0, claimed: 0, sent: 0, failed: 0, ignoredActor: 0, ignoredCategory: 0, ignoredSquad: 0, unclaimed: 0 };
   try {
-  const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
-  if (!events.length) return;
-  const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
-  const members = await db('members',{query:'?select=id,squad_id'});
-  const prefs = await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
-  for (const event of events.reverse()) {
-    for (const link of links) {
-      const member = members.find(x=>x.id===link.member_id);
-      if (!member || member.squad_id!==event.squad_id || member.id===event.actor_id) continue;
-      const pref = prefs.find(x=>x.member_id===member.id);
-      if (!pref || pref.enabled !== true || pref.categories?.[event.category] !== true) continue;
-      const claimed = await rpc('claim_discord_dm_delivery',{p_event_id:event.id,p_discord_user_id:link.discord_user_id});
-      if (claimed !== true) continue;
-      try {
-        await sendDiscordDM(link.discord_user_id,event);
-        await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'sent',delivered_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
-      } catch (e) {
-        console.warn('[discord] DM delivery failed:',event.id,String(e.message).slice(0,120));
-        await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'failed',last_error:String(e.message).slice(0,150),updated_at:new Date().toISOString()}});
+    const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
+    stats.events = events.length;
+    if (!events.length) return;
+    const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
+    const members = await db('members',{query:'?select=id,squad_id'});
+    const prefs = await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
+    stats.links = links.length;
+    stats.enabled = prefs.filter(p=>p.enabled === true).length;
+    const memberById = new Map(members.map(m=>[m.id,m]));
+    const prefById = new Map(prefs.map(p=>[p.member_id,p]));
+    for (const event of events.reverse()) {
+      for (const link of links) {
+        const member = memberById.get(link.member_id);
+        if (!member || member.squad_id !== event.squad_id) { stats.ignoredSquad++; continue; }
+        if (member.id === event.actor_id) { stats.ignoredActor++; continue; }
+        const pref = prefById.get(member.id);
+        if (!pref || pref.enabled !== true || pref.categories?.[event.category] !== true) { stats.ignoredCategory++; continue; }
+        stats.candidates++;
+        const claimed = await rpc('claim_discord_dm_delivery',{p_event_id:event.id,p_discord_user_id:link.discord_user_id});
+        if (claimed !== true) { stats.unclaimed++; continue; }
+        stats.claimed++;
+        try {
+          await sendDiscordDM(link.discord_user_id,event);
+          await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'sent',delivered_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
+          stats.sent++;
+        } catch (e) {
+          stats.failed++;
+          console.warn('[discord] DM delivery failed:',event.id,String(e.message).slice(0,120));
+          await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'failed',last_error:String(e.message).slice(0,150),updated_at:new Date().toISOString()}});
+        }
       }
     }
+  } catch (error) {
+    console.error('[discord] DM polling error:', String(error?.message || error).slice(0,250));
+  } finally {
+    console.log('[discord] DM poll summary:', JSON.stringify(stats));
+    discordDmPolling = false;
   }
-  } finally { discordDmPolling = false; }
 }
 
 async function sectionProtect(interaction,m) {
@@ -412,6 +440,7 @@ http.createServer(async (req, res) => {
 });
 
 if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && process.env.DISCORD_DM_START_AT && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT))) {
+  void processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message));
   setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
   console.log('[discord] DM notifications enabled');
 }
