@@ -41,6 +41,33 @@ function response(interaction) {
   }
   return { type: 4, data: { flags: 64, content: 'Неизвестная команда.' } };
 }
+// Register the test-guild slash command on startup, without exposing the bot token.
+async function registerGuildCommand() {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  const appId = process.env.DISCORD_APPLICATION_ID;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!token || !appId || !guildId) {
+    console.warn('[discord] /fury registration skipped: missing bot token, application ID or guild ID');
+    return;
+  }
+  try {
+    const url = `https://discord.com/api/v10/applications/${encodeURIComponent(appId)}/guilds/${encodeURIComponent(guildId)}/commands`;
+    const result = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'fury', description: 'Открыть панель управления FURY HUB', type: 1 }),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!result.ok) {
+      const detail = await result.text();
+      console.error('[discord] /fury registration failed', { status: result.status, detail: detail.slice(0, 500) });
+      return;
+    }
+    console.log('[discord] /fury guild command registered successfully');
+  } catch (error) {
+    console.error('[discord] /fury registration request failed', error?.message || 'Unknown error');
+  }
+}
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true, service: 'furyhub-discord-bot' });
   if (req.method !== 'POST' || req.url !== '/interactions') return json(res, 404, { error: 'Not found' });
@@ -74,4 +101,7 @@ http.createServer(async (req, res) => {
     return json(res, 200, reply);
   }
   catch (error) { console.error('Interaction error', error); return json(res, 500, { error: 'Internal error' }); }
-}).listen(port, '0.0.0.0', () => console.log('FURY HUB Discord interactions listening on port', port));
+}).listen(port, '0.0.0.0', () => {
+  console.log('FURY HUB Discord interactions listening on port', port);
+  void registerGuildCommand();
+});
