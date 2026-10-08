@@ -367,7 +367,8 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
-    const isDeferred = (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) ||
+    const isDeferred = (interaction.type === 5 && ['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id)) ||
+      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
