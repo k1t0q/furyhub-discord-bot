@@ -58,6 +58,56 @@ async function linked(interaction) {
 const admin = m => ['admin','owner','leader'].includes(String(m?.access_role || '').toLowerCase());
 const moscowDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+
+const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, raid: 0xb32932, task: 0x458ac9, stash: 0xd69d41 };
+async function sendDiscordDM(userId, event) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) throw Error('Bot token missing');
+  const headers = { Authorization: 'Bot ' + token, 'Content-Type': 'application/json' };
+  const channel = await fetch('https://discord.com/api/v10/users/@me/channels', {
+    method: 'POST', headers, body: JSON.stringify({ recipient_id: userId }), signal: AbortSignal.timeout(8000)
+  });
+  if (!channel.ok) throw Error('Cannot open DM (' + channel.status + ')');
+  const { id } = await channel.json();
+  const category = String(event.category || 'general').toLowerCase();
+  const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      embeds: [{ title: String(event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Открыть ДУБЛЬ', url: homepage }] }]
+    }), signal: AbortSignal.timeout(8000)
+  });
+  if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
+}
+async function processDiscordNotifications() {
+  if (!apiReady() || !process.env.DISCORD_BOT_TOKEN) return;
+  const events = await db('squad_notification_events',{query:'?select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
+  if (!events.length) return;
+  const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
+  const members = await db('members',{query:'?select=id,squad_id'});
+  const prefs = await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
+  for (const event of events.reverse()) {
+    for (const link of links) {
+      const member = members.find(x=>x.id===link.member_id);
+      if (!member || member.squad_id!==event.squad_id || member.id===event.actor_id) continue;
+      const pref = prefs.find(x=>x.member_id===member.id);
+      if (pref?.enabled===false || pref?.categories?.[event.category]===false) continue;
+      const key = '?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id+'&select=status,attempts,updated_at';
+      const previous = await db('discord_dm_deliveries',{query:key});
+      if (previous[0]?.status==='sent' || previous[0]?.status==='failed') continue;
+      if (previous[0]?.attempts>=3) continue;
+      try {
+        await db('discord_dm_deliveries',{method:'POST',body:{event_id:event.id,discord_user_id:link.discord_user_id,status:'pending',attempts:(previous[0]?.attempts||0)+1,updated_at:new Date().toISOString()}});
+        await sendDiscordDM(link.discord_user_id,event);
+        await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'sent',delivered_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
+      } catch (e) {
+        console.warn('[discord] DM delivery failed:',event.id,String(e.message).slice(0,120));
+        await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'failed',last_error:String(e.message).slice(0,150),updated_at:new Date().toISOString()}});
+      }
+    }
+  }
+}
+
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
@@ -214,3 +264,8 @@ http.createServer(async (req, res) => {
   console.log('FURY HUB Discord interactions listening on port', port);
   void registerGuildCommand();
 });
+
+if (process.env.DISCORD_DM_NOTIFICATIONS === 'true') {
+  setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
+  console.log('[discord] DM notifications enabled');
+}
