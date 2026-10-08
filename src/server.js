@@ -211,18 +211,27 @@ async function handle(interaction) {
     }
     return ephem('**Рейды**\n'+(raids.map(x=>'#'+x.id+' · '+x.title+' · '+(x.raid_date||'')+' '+(x.raid_time||'').slice(0,5)).join('\n')||'Рейдов пока нет.')+'\nДля создания и редактирования рейдов используй сайт.',raids.slice(0,4).map(x=>row(button('Участвовать #'+x.id,'fury:raids:join-'+x.id,3))));
   }
+  const taskActive = t => {
+    if (t.status === 'Выполнено' || t.status === 'Выполнена' || t.status === 'Просрочено') return false;
+    const d = String(t.deadline || '').trim();
+    const m = d.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}(?::?\d{2})?)?$/i);
+    if (!m) return true;
+    const timestamp = Date.parse(m[1] + 'T' + m[2] + ':00' + (m[3] || '+03:00'));
+    return !Number.isFinite(timestamp) || Date.now() <= timestamp;
+  };
   if (section==='tasks') {
     if(action?.startsWith('claim-')) {
       const id=action.slice(6);if(!/^\d+$/.test(id))return ephem('Неверная задача.');
-      const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id'});
+      const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id,status,deadline'});
       if(!task.length)return ephem('Задача не найдена.');
+      if(!taskActive(task[0]))return ephem('Задача просрочена или выполнена. Обнови список.');
       if(task[0].assignee_id===m.id)return ephem('Эта задача уже закреплена за тобой.');
       if(task[0].assignee_id)return ephem('Задача уже назначена другому участнику.');
       const updatedTasks = await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
       if (!updatedTasks.length) return ephem('Задачу уже забрал другой участник. Обнови список.');
       return ephem('Задача взята в работу.');
     }
-    const tasks=await db('tasks',{query:squad+'&select=id,title,status,assignee_id&order=created_at.desc&limit=8'});
+    const tasks=(await db('tasks',{query:squad+'&select=id,title,status,assignee_id,deadline&order=created_at.desc&limit=100'})).filter(taskActive).slice(0,8);
     return ephem('**Активные задачи**\n'+(tasks.map(x=>'#'+x.id+' · '+x.title+' · '+(x.status||'В работе')).join('\n')||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
   }
   if (section==='explosives') {
