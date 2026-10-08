@@ -47,6 +47,17 @@ async function db(table, options = {}) {
   if (!res.ok) throw Error('Database request failed (' + res.status + ')');
   const text = await res.text(); return text ? JSON.parse(text) : [];
 }
+async function rpc(name, payload) {
+  if (!apiReady()) throw Error('Supabase not configured');
+  const res = await fetch(supabaseUrl.replace(/\\/$/,'') + '/rest/v1/rpc/' + name, {
+    method: 'POST',
+    headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!res.ok) throw Error('RPC failed (' + res.status + ')');
+  return res.json();
+}
 async function linked(interaction) {
   const id = interaction.member?.user?.id || interaction.user?.id;
   if (!id || !/^\\d{15,22}$/.test(id)) return null;
@@ -94,7 +105,7 @@ async function processDiscordNotifications() {
       if (pref?.enabled===false || pref?.categories?.[event.category]===false) continue;
       const key = '?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id+'&select=status,attempts,updated_at';
       const previous = await db('discord_dm_deliveries',{query:key});
-      if (previous[0]?.status==='sent' || previous[0]?.status==='failed') continue;
+      if (previous[0]?.status==='sent' || previous[0]?.status==='failed' || previous[0]?.status==='pending') continue;
       if (previous[0]?.attempts>=3) continue;
       try {
         await db('discord_dm_deliveries',{method:'POST',body:{event_id:event.id,discord_user_id:link.discord_user_id,status:'pending',attempts:(previous[0]?.attempts||0)+1,updated_at:new Date().toISOString()}});
@@ -124,19 +135,19 @@ async function handle(interaction) {
     if (!/^[a-f0-9]{36}$/.test(code)) return ephem('Неверный формат кода. Получи новый код в настройках сайта.');
     const { createHash } = await import('node:crypto');
     const hash = createHash('sha256').update(code).digest('hex');
-    const codes = await db('discord_link_codes', { query: '?code_hash=eq.' + hash + '&used_at=is.null&expires_at=gt.' + encodeURIComponent(new Date().toISOString()) + '&select=member_id,code_hash' });
-    if (!codes.length) return ephem('Код недействителен или срок его действия истёк.');
     const uid = interaction.member?.user?.id || interaction.user?.id;
-    const current = await db('discord_member_links', { query: '?member_id=eq.' + codes[0].member_id + '&select=discord_user_id' });
-    if (current.length && current[0].discord_user_id !== uid) return ephem('Этот аккаунт уже привязан к другому Discord. Обратись к администратору.');
-    await db('discord_member_links', { method: 'POST', body: { discord_user_id: uid, member_id: codes[0].member_id } });
-    await db('discord_link_codes', { method: 'PATCH', query: '?code_hash=eq.' + hash + '&used_at=is.null', body: { used_at: new Date().toISOString() } });
-    return ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.');
+    if (!/^\\d{15,22}$/.test(String(uid||''))) return ephem('Не удалось определить Discord-аккаунт.');
+    const redeemed = await rpc('consume_discord_link_code', { p_code_hash: hash, p_discord_user_id: uid });
+    return redeemed === true
+      ? ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.')
+      : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
+
   }
   if (interaction.type !== InteractionType.MESSAGE_COMPONENT || !String(interaction.data?.custom_id||'').startsWith('fury:')) return ephem('Неизвестная команда.');
   const m = await linked(interaction);
   if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
   const [,section,action] = interaction.data.custom_id.split(':');
+  if (process.env.DISCORD_LIVE_WRITES !== 'true' && action) return ephem('Изменение данных пока отключено до завершения тестирования. Просмотр доступен.');
   const squad = '?squad_id=eq.' + m.squad_id;
   if (section === 'presence') {
     if (['Буду','Под вопросом','Не буду'].includes(action)) {
