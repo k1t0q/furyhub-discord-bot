@@ -274,11 +274,12 @@ async function handle(interaction) {
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
   }
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id)) {
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && (['fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id) || (interaction.data?.custom_id === 'fury:menu' && ['fury:add-stash','fury:add-base'].includes(interaction.data?.values?.[0])))) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member = await linked(interaction);
     if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    const kind = interaction.data.custom_id === 'fury:add-stash' ? 'stash' : 'base';
+    const selected = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
+    const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
     return {type:9,data:{custom_id:'fury:place-title:'+kind,title:kind==='stash'?'Добавить схрон':'Добавить базу',components:[{type:1,components:[{type:4,custom_id:'place_title',label:'Название',style:1,min_length:1,max_length:150,required:true,placeholder:'Введите название'}]}]}};
   }
   if (interaction.type === 5 && /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||'')) {
@@ -485,7 +486,7 @@ http.createServer(async (req, res) => {
   try {
     const interaction = JSON.parse(body.toString('utf8'));
     const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
-      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) ||
+      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id) && !(interaction.data?.custom_id === 'fury:menu' && ['fury:add-stash','fury:add-base'].includes(interaction.data?.values?.[0]))) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
