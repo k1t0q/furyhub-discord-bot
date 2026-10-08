@@ -20,7 +20,7 @@ const panel = (publicPost = false) => ({
       color: 0xb32932,
       fields: [
         { name: 'Управление', value: 'Выбери нужный раздел с помощью кнопок ниже.' },
-        { name: 'Статус', value: 'Тестовый режим · синхронизация с сайтом пока не подключена.' }
+        { name: 'Статус', value: 'Интеграция в режиме проверки · изменение данных отключено.' }
       ],
       footer: { text: 'SCUM HUB • SQUAD CONTROL' }
     }],
@@ -40,7 +40,7 @@ const row = (...buttons) => ({ type: 1, components: buttons });
 async function db(table, options = {}) {
   if (!apiReady()) throw Error('Supabase server configuration missing');
   const { method = 'GET', query = '', body } = options;
-  const res = await fetch(supabaseUrl.replace(/\\/$/, '') + '/rest/v1/' + table + query, {
+  const res = await fetch(supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + table + query, {
     method, headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json', Prefer: 'return=representation,resolution=merge-duplicates' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(8000)
   });
@@ -49,7 +49,7 @@ async function db(table, options = {}) {
 }
 async function rpc(name, payload) {
   if (!apiReady()) throw Error('Supabase not configured');
-  const res = await fetch(supabaseUrl.replace(/\\/$/,'') + '/rest/v1/rpc/' + name, {
+  const res = await fetch(supabaseUrl.replace(/\/$/,'') + '/rest/v1/rpc/' + name, {
     method: 'POST',
     headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -60,7 +60,7 @@ async function rpc(name, payload) {
 }
 async function linked(interaction) {
   const id = interaction.member?.user?.id || interaction.user?.id;
-  if (!id || !/^\\d{15,22}$/.test(id)) return null;
+  if (!id || !/^\d{15,22}$/.test(id)) return null;
   const links = await db('discord_member_links', { query: '?discord_user_id=eq.' + id + '&select=member_id' });
   if (!links.length) return null;
   const members = await db('members', { query: '?id=eq.' + links[0].member_id + '&select=id,squad_id,nick,access_role' });
@@ -136,7 +136,7 @@ async function handle(interaction) {
     const { createHash } = await import('node:crypto');
     const hash = createHash('sha256').update(code).digest('hex');
     const uid = interaction.member?.user?.id || interaction.user?.id;
-    if (!/^\\d{15,22}$/.test(String(uid||''))) return ephem('Не удалось определить Discord-аккаунт.');
+    if (!/^\d{15,22}$/.test(String(uid||''))) return ephem('Не удалось определить Discord-аккаунт.');
     const redeemed = await rpc('consume_discord_link_code', { p_code_hash: hash, p_discord_user_id: uid });
     return redeemed === true
       ? ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.')
@@ -147,7 +147,7 @@ async function handle(interaction) {
   const m = await linked(interaction);
   if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
   const [,section,action] = interaction.data.custom_id.split(':');
-  if (process.env.DISCORD_LIVE_WRITES !== 'true' && action) return ephem('Изменение данных пока отключено до завершения тестирования. Просмотр доступен.');
+  if (action) return ephem('Изменение данных пока отключено до завершения тестирования. Просмотр доступен.');
   const squad = '?squad_id=eq.' + m.squad_id;
   if (section === 'presence') {
     if (['Буду','Под вопросом','Не буду'].includes(action)) {
@@ -159,7 +159,7 @@ async function handle(interaction) {
     const today=await db('presence_history',{query:squad+'&day=eq.'+moscowDay()+'&select=member_id,status,join_time'});
     const members=await db('members',{query:squad+'&select=id,nick'});
     const lines=today.map(p=>(members.find(x=>x.id===p.member_id)?.nick||'Участник')+' — '+p.status+(p.join_time?' ('+p.join_time.slice(0,5)+')':''));
-    return ephem('**Моё участие · сегодня**\\n'+(lines.join('\\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4))]);
+    return ephem('**Моё участие · сегодня**\n'+(lines.join('\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4))]);
   }
   if (section==='protect') {
     if(action==='update') {
@@ -168,23 +168,23 @@ async function handle(interaction) {
       return ephem('Протект обновлён. Изменение сохранено на сайте.');
     }
     const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
-    return ephem('**Протект**\\nПоследнее обновление: '+fmt(p[0]?.effective_at||p[0]?.updated_at),admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
+    return ephem('**Протект**\nПоследнее обновление: '+fmt(p[0]?.effective_at||p[0]?.updated_at),admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
   }
   if (section==='raids') {
     const raids=await db('raids',{query:squad+'&select=id,title,raid_date,raid_time&order=created_at.desc&limit=8'});
     if(action?.startsWith('join-')) {
-      const id=action.slice(5);if(!/^\\d+$/.test(id))return ephem('Неверный рейд.');
+      const id=action.slice(5);if(!/^\d+$/.test(id))return ephem('Неверный рейд.');
       const found=raids.find(x=>String(x.id)===id);
       if(!found)return ephem('Рейд не найден в списке.');
       const prior=await db('raid_participants',{query:'?raid_id=eq.'+id+'&member_id=eq.'+m.id+'&select=raid_id'});
       if(!prior.length)await db('raid_participants',{method:'POST',body:{raid_id:Number(id),member_id:m.id}});
       return ephem('Ты записан на рейд «'+found.title+'».');
     }
-    return ephem('**Рейды**\\n'+(raids.map(x=>'#'+x.id+' · '+x.title+' · '+(x.raid_date||'')+' '+(x.raid_time||'').slice(0,5)).join('\\n')||'Рейдов пока нет.')+'\\nДля создания и редактирования рейдов используй сайт.',raids.slice(0,4).map(x=>row(button('Участвовать #'+x.id,'fury:raids:join-'+x.id,3))));
+    return ephem('**Рейды**\n'+(raids.map(x=>'#'+x.id+' · '+x.title+' · '+(x.raid_date||'')+' '+(x.raid_time||'').slice(0,5)).join('\n')||'Рейдов пока нет.')+'\nДля создания и редактирования рейдов используй сайт.',raids.slice(0,4).map(x=>row(button('Участвовать #'+x.id,'fury:raids:join-'+x.id,3))));
   }
   if (section==='tasks') {
     if(action?.startsWith('claim-')) {
-      const id=action.slice(6);if(!/^\\d+$/.test(id))return ephem('Неверная задача.');
+      const id=action.slice(6);if(!/^\d+$/.test(id))return ephem('Неверная задача.');
       const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id'});
       if(!task.length)return ephem('Задача не найдена.');
       if(task[0].assignee_id && task[0].assignee_id!==m.id)return ephem('Задача уже назначена другому участнику.');
@@ -192,18 +192,18 @@ async function handle(interaction) {
       return ephem('Задача взята в работу.');
     }
     const tasks=await db('tasks',{query:squad+'&select=id,title,status,assignee_id&order=created_at.desc&limit=8'});
-    return ephem('**Активные задачи**\\n'+(tasks.map(x=>'#'+x.id+' · '+x.title+' · '+(x.status||'В работе')).join('\\n')||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
+    return ephem('**Активные задачи**\n'+(tasks.map(x=>'#'+x.id+' · '+x.title+' · '+(x.status||'В работе')).join('\n')||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
   }
   if (section==='explosives') {
     const items=await db('explosives_inventory',{query:squad+'&select=item,quantity&order=item.asc'});
-    return ephem('**ВЗРЫВ · запасы**\\n'+(items.map(x=>x.item+': '+x.quantity).join('\\n')||'Запасы пока не указаны.')+'\\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.');
+    return ephem('**ВЗРЫВ · запасы**\n'+(items.map(x=>x.item+': '+x.quantity).join('\n')||'Запасы пока не указаны.')+'\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.');
   }
   if (section==='alarm') {
     if(action==='confirm') {
       await db('squad_raid_alarms',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id}});
       return ephem('**Тревога отправлена!** Отряд получит уведомление через действующую систему сайта.');
     }
-    return ephem('**НАС РЕЙДЯТ**\\nПодтверди отправку тревоги всему отряду.',[row(button('Подтвердить тревогу','fury:alarm:confirm',4))]);
+    return ephem('**НАС РЕЙДЯТ**\nПодтверди отправку тревоги всему отряду.',[row(button('Подтвердить тревогу','fury:alarm:confirm',4))]);
   }
   return ephem('Раздел не найден.');
 }
@@ -276,7 +276,7 @@ http.createServer(async (req, res) => {
   void registerGuildCommand();
 });
 
-if (process.env.DISCORD_DM_NOTIFICATIONS === 'true') {
+if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false') {
   setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
   console.log('[discord] DM notifications enabled');
 }
