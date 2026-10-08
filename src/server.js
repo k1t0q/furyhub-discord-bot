@@ -239,6 +239,18 @@ async function sectionProtect(interaction,m) {
   const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   return ephem('**ПРОТЕКТ**\nПоследнее обновление:\n**'+(author[0]?.nick||'Участник')+' · '+base.toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',buttons);
 }
+async function resetPanelSelection(interaction) {
+  if (interaction.type !== InteractionType.MESSAGE_COMPONENT || interaction.data?.custom_id !== 'fury:menu' || !interaction.channel_id || !interaction.message?.id) return;
+  try {
+    const response = await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
+      method:'PATCH',
+      headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({components:panel(true).data.components}),
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!response.ok)console.error('[discord] Menu reset failed:',response.status);
+  }catch(error){console.error('[discord] Menu reset failed:',error.message);}
+}
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
@@ -292,17 +304,6 @@ async function handle(interaction) {
     const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
     const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот через **Ctrl + V** в одном сообщении. Затем нажми Enter.',true);
-    if (dm && interaction.channel_id && interaction.message?.id) {
-      try {
-        const reset = await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
-          method:'PATCH',
-          headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
-          body:JSON.stringify({components:panel(true).data.components}),
-          signal:AbortSignal.timeout(8000)
-        });
-        if(!reset.ok)console.error('[discord] Menu reset failed:',reset.status);
-      } catch(error){console.error('[discord] Menu reset failed:',error.message);}
-    }
     return ephem(dm ? 'Открой личные сообщения с ботом. Отправь название и скриншот одним сообщением.' : 'Не удалось отправить личное сообщение. Разреши ЛС от участников сервера и выбери пункт ещё раз.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
@@ -501,6 +502,7 @@ http.createServer(async (req, res) => {
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
+      if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:menu') void resetPanelSelection(interaction);
       return json(res, 200, reply);
     }
     // Acknowledge within Discord's 3-second deadline before any database request.
@@ -516,6 +518,7 @@ http.createServer(async (req, res) => {
         console.error('[discord] deferred interaction failed:', error?.message || 'Unknown error');
         reply = ephem('Не удалось выполнить действие. Проверь логи бота в Layero.');
       }
+      await resetPanelSelection(interaction);
       const data = reply?.data || { content: 'Не удалось получить ответ.' };
       try {
         const url = 'https://discord.com/api/v10/webhooks/' + encodeURIComponent(appId) + '/' + encodeURIComponent(token) + '/messages/@original';
