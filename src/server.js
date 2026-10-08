@@ -175,6 +175,19 @@ async function handle(interaction) {
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
   }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
+    return {type:9,data:{custom_id:'fury:presence:save-time',title:'Время захода в SCUM',components:[{type:1,components:[{type:4,custom_id:'join_time',label:'Время захода (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'20:30'}]}]}};
+  }
+  if (interaction.type === 5 && interaction.data?.custom_id === 'fury:presence:save-time') {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
+    const member=await linked(interaction);
+    if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
+    if (!/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return ephem('Введите время ЧЧ:ММ, например 20:30.');
+    await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:member.squad_id,member_id:member.id,day:moscowDay(),status:'Буду',join_time:time,updated_at:new Date().toISOString()}});
+    return ephem('**Моё участие · сегодня**\\nСтатус: **Буду**\\nВремя захода: **'+time+' МСК**\\nСохранено на сайте ДУБЛЬ.',[row(button('Изменить время','fury:presence:change-time'))]);
+  }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:protect:set-start') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
     return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить начало протекта',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время начала (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
@@ -203,12 +216,12 @@ async function handle(interaction) {
       const date = moscowDay();
       const old = await db('presence_history',{query:'?member_id=eq.'+m.id+'&day=eq.'+date+'&select=join_time'});
       await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:m.squad_id,member_id:m.id,day:date,status:action,join_time:action==='Буду'?(old[0]?.join_time||null):null,updated_at:new Date().toISOString()}});
-      return ephem('Статус обновлён: **'+action+'**. Время захода можно уточнить на сайте.');
+      return ephem('Статус обновлён: **'+action+'**.');
     }
     const today=await db('presence_history',{query:squad+'&day=eq.'+moscowDay()+'&select=member_id,status,join_time'});
     const members=await db('members',{query:squad+'&select=id,nick'});
     const lines=today.map(p=>(members.find(x=>x.id===p.member_id)?.nick||'Участник')+' — '+p.status+(p.join_time?' ('+p.join_time.slice(0,5)+')':''));
-    return ephem('**Моё участие · сегодня**\n'+(lines.join('\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4))]);
+    return ephem('**Моё участие · сегодня**\n'+(lines.join('\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4)),row(button('Изменить время','fury:presence:change-time'))]);
   }
   if (section==='protect') {
     if(action==='set-start') {
@@ -343,7 +356,7 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
-    const isDeferred = (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id !== 'fury:protect:set-start') ||
+    const isDeferred = (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
