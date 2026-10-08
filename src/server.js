@@ -193,8 +193,13 @@ async function handle(interaction) {
       if (updated !== true) return ephem('Протект уже обновляли за последние 30 секунд или недостаточно прав.');
       return ephem('Протект обновлён. Изменение сохранено на сайте.');
     }
-    const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
-    return ephem('**Протект**\nПоследнее обновление: '+fmt(p[0]?.effective_at||p[0]?.updated_at),admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
+    const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
+    const last=p[0];
+    if(!last) return ephem('**ПРОТЕКТ**\nПока нет обновлений.',admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
+    const author=last.member_id?await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}):[];
+    const base=new Date(last.effective_at||last.updated_at);
+    const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+    return ephem('**ПРОТЕКТ**\nПоследнее обновление: **'+(author[0]?.nick||'Участник')+' · '+clock(0)+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
   }
   if (section==='raids') {
     const raids=await db('raids',{query:squad+'&select=id,title,raid_date,raid_time&order=created_at.desc&limit=8'});
