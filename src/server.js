@@ -205,7 +205,8 @@ async function handle(interaction) {
       const id=action.slice(6);if(!/^\d+$/.test(id))return ephem('Неверная задача.');
       const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id'});
       if(!task.length)return ephem('Задача не найдена.');
-      if(task[0].assignee_id && task[0].assignee_id!==m.id)return ephem('Задача уже назначена другому участнику.');
+      if(task[0].assignee_id===m.id)return ephem('Эта задача уже закреплена за тобой.');
+      if(task[0].assignee_id)return ephem('Задача уже назначена другому участнику.');
       const updatedTasks = await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
       if (!updatedTasks.length) return ephem('Задачу уже забрал другой участник. Обнови список.');
       return ephem('Задача взята в работу.');
