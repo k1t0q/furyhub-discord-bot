@@ -254,8 +254,14 @@ async function handle(interaction) {
     return ephem('**Активные задачи**\\n\\n'+(description||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
   }
   if (section==='explosives') {
-    const items=await db('explosives_inventory',{query:squad+'&select=item,quantity&order=item.asc'});
-    return ephem('**ВЗРЫВ · запасы**\n'+(items.map(x=>x.item+': '+x.quantity).join('\n')||'Запасы пока не указаны.')+'\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.');
+    const items=await db('explosives_inventory',{query:squad+'&select=item,quantity'});
+    const order=['С4','РПГ','ГРАНАТА','ДИНАМИТ','ПАЙПА','40'];
+    const stock=new Map(items.map(x=>[x.item==='C4'?'С4':x.item==='Граната'?'ГРАНАТА':x.item,Number(x.quantity||0)]));
+    const lines=order.map(name=>'**'+name+':** '+(stock.get(name)||0));
+    const damage=(stock.get('С4')||0)*400+(stock.get('РПГ')||0)*200+(stock.get('ГРАНАТА')||0)*100+(stock.get('ДИНАМИТ')||0)*200;
+    const walls=Math.floor(damage/1200);
+    const word=(n)=>{const m=n%100,a=n%10;return m>=11&&m<=14?'СТЕН':a===1?'СТЕНУ':a>=2&&a<=4?'СТЕНЫ':'СТЕН';};
+    return ephem('**ВЗРЫВ · ЗАПАСЫ**\\n'+lines.join('\\n')+'\\n\\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**\\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.');
   }
   if (section==='alarm') {
     if(action==='confirm') {
