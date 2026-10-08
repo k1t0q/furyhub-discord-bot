@@ -135,10 +135,13 @@ async function queueExpiredProtectNotifications(launchAt) {
     if (!Number.isFinite(base)) continue;
     const expired = base + 540 * 60000;
     if (expired > now || expired < since) continue;
+    const sourceKey = 'protect-expired:'+item.id;
+    const existing = await db('squad_notification_events',{query:'?source_key=eq.'+sourceKey+'&select=id&limit=1'});
+    if (existing.length) continue;
     const result = await db('squad_notification_events',{
       method:'POST',
       query:'?on_conflict=source_key',
-      body:{squad_id:item.squad_id,category:'protect',actor_id:null,title:'ПРОТЕКТ СПАЛ',body:'Защита базы закончилась в '+protectClock(expired)+'.\nБаза осталась без протекта!',source_key:'protect-expired:'+item.id}
+      body:{squad_id:item.squad_id,category:'protect',actor_id:null,title:'ПРОТЕКТ СПАЛ',body:'Защита базы закончилась в '+protectClock(expired)+'.\nБаза осталась без протекта!',source_key:sourceKey}
     });
     if (result.length) queued++;
   }
