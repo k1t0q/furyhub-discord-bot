@@ -203,7 +203,7 @@ async function processDiscordNotifications() {
       for (const link of links) {
         const member = memberById.get(link.member_id);
         if (!member || member.squad_id !== event.squad_id) { stats.ignoredSquad++; continue; }
-        if (member.id === event.actor_id) { stats.ignoredActor++; continue; }
+        if (member.id === event.actor_id && event.category !== 'alarm') { stats.ignoredActor++; continue; }
         const pref = prefById.get(member.id);
         if (!pref || pref.enabled !== true || (pref.categories?.[event.category] !== true && !(event.category === 'base' && pref.categories?.stash === true))) { stats.ignoredCategory++; continue; }
         stats.candidates++;
