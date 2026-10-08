@@ -15,15 +15,19 @@ const panel = () => ({
   data: {
     flags: 64,
     embeds: [{
-      title: 'ДУБЛЬ | SQUAD CONTROL',
-      description: 'Тестовая панель FURY HUB. Интеграция с базой ещё не подключена.',
+      title: 'SCUM HUB  |  ДУБЛЬ',
+      description: '**Центр управления отрядом**\\nУчастие, протект, рейды и задачи — в одном месте.',
       color: 0xb32932,
-      fields: [{ name: 'Режим', value: 'Тестовый сервер — данные отряда не изменяются.' }]
+      fields: [
+        { name: 'Управление', value: 'Выбери нужный раздел с помощью кнопок ниже.' },
+        { name: 'Статус', value: 'Тестовый режим · синхронизация с сайтом пока не подключена.' }
+      ],
+      footer: { text: 'SCUM HUB • SQUAD CONTROL' }
     }],
     components: [
       { type: 1, components: [button('Моё участие', 'fury:presence', 3), button('Протект', 'fury:protect'), button('Рейды', 'fury:raids')] },
       { type: 1, components: [button('Задачи', 'fury:tasks'), button('ВЗРЫВ', 'fury:explosives'), button('Нас рейдят', 'fury:alarm', 4)] },
-      { type: 1, components: [{ type: 2, style: 5, label: 'Открыть FURYHUB', url: homepage }] }
+      { type: 1, components: [{ type: 2, style: 5, label: 'Открыть сайт', url: homepage }] }
     ]
   }
 });
