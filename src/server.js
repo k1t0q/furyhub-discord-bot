@@ -184,7 +184,7 @@ async function handle(interaction) {
     const member=await linked(interaction);
     if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
     const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
-    if (!/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return ephem('Введите время ЧЧ:ММ, например 20:30.');
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return ephem('Введите время ЧЧ:ММ, например 20:30.');
     await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:member.squad_id,member_id:member.id,day:moscowDay(),status:'Буду',join_time:time,updated_at:new Date().toISOString()}});
     return ephem('**Моё участие · сегодня**\\nСтатус: **Буду**\\nВремя захода: **'+time+' МСК**\\nСохранено на сайте ДУБЛЬ.',[row(button('Изменить время','fury:presence:change-time'))]);
   }
@@ -198,7 +198,7 @@ async function handle(interaction) {
     const member=await linked(interaction);
     if (!member || !admin(member)) return ephem('Изменять время протекта может только администратор с привязанным аккаунтом.');
     const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
-    if (!/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return ephem('Введите время в формате ЧЧ:ММ, например 08:45.');
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return ephem('Введите время в формате ЧЧ:ММ, например 08:45.');
     const ok=await rpc('discord_set_protect_start',{p_discord_user_id:interaction.member?.user?.id||interaction.user?.id,p_start_time:time});
     if(ok!==true)return ephem('Не удалось изменить время начала протекта.');
     return await sectionProtect(interaction,member);
