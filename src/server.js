@@ -557,7 +557,7 @@ async function receivePlaceScreenshot(message) {
     return;
   }
   const title=String(message.content||'').trim();
-  const attachment=(message.attachments||[]).find(a=>/^image\\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
+  const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
   if(!title || title.length>150 || !attachment){
     await discordSendTextDM(uid,'Отправь **название и скриншот в одном сообщении** (до 150 символов). Скриншот вставь через Ctrl + V.');
     return;
