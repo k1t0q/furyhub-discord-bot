@@ -27,8 +27,13 @@ const panel = (publicPost = false) => ({
       footer: { text: process.env.DISCORD_TEST_MODE === 'false' ? 'SCUM HUB · синхронизация с ДУБЛЬ' : 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
     components: [
-      row(button('УЧАСТИЕ', 'fury:presence', 2), button('ПРОТЕКТ', 'fury:protect', 2)),
-      row(button('РЕЙДЫ', 'fury:raids', 2), button('ЗАДАЧИ', 'fury:tasks', 2), button('ВЗРЫВ', 'fury:explosives', 2)),
+      row({ type: 3, custom_id: 'fury:menu', placeholder: 'Выберите нужное', min_values: 1, max_values: 1, options: [
+        { label: 'Моё участие', value: 'fury:presence', description: 'Отметиться и посмотреть состав', emoji: { name: '👥' } },
+        { label: 'Протект', value: 'fury:protect', description: 'Время и обновление протекта', emoji: { name: '🛡️' } },
+        { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
+        { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
+        { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
+      ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4)),
       row({ type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
@@ -164,7 +169,9 @@ async function handle(interaction) {
   if (interaction.type !== InteractionType.MESSAGE_COMPONENT || !String(interaction.data?.custom_id||'').startsWith('fury:')) return ephem('Неизвестная команда.');
   const m = await linked(interaction);
   if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
-  const [,section,action] = interaction.data.custom_id.split(':');
+  const selection = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
+  if (!/^fury:(presence|protect|raids|tasks|explosives|alarm)(?::|$)/.test(String(selection || ''))) return ephem('Неизвестный раздел.');
+  const [,section,action] = selection.split(':');
   if (action && process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных пока отключено.');
   const squad = '?squad_id=eq.' + m.squad_id;
   if (section === 'presence') {
