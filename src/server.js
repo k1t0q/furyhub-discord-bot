@@ -27,13 +27,8 @@ const panel = (publicPost = false) => ({
       footer: { text: process.env.DISCORD_TEST_MODE === 'false' ? 'SCUM HUB · синхронизация с ДУБЛЬ' : 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
     components: [
-      row({ type: 3, custom_id: 'fury:menu', placeholder: 'Выберите нужное', min_values: 1, max_values: 1, options: [
-        { label: 'Моё участие', value: 'fury:presence', description: 'Отметиться и посмотреть состав', emoji: { name: '👥' } },
-        { label: 'Протект', value: 'fury:protect', description: 'Время и обновление протекта', emoji: { name: '🛡️' } },
-        { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
-        { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
-        { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
-      ] }),
+      row(button('УЧАСТИЕ','fury:presence'),button('ПРОТЕКТ','fury:protect')),
+      row(button('РЕЙДЫ','fury:raids'),button('ЗАДАЧИ','fury:tasks'),button('ВЗРЫВ','fury:explosives')),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
