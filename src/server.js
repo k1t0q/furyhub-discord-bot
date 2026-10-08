@@ -112,12 +112,9 @@ async function processDiscordNotifications() {
       if (!member || member.squad_id!==event.squad_id || member.id===event.actor_id) continue;
       const pref = prefs.find(x=>x.member_id===member.id);
       if (!pref || pref.enabled !== true || pref.categories?.[event.category] !== true) continue;
-      const key = '?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id+'&select=status,attempts,updated_at';
-      const previous = await db('discord_dm_deliveries',{query:key});
-      if (previous[0]?.status==='sent' || previous[0]?.status==='failed' || previous[0]?.status==='pending') continue;
-      if (previous[0]?.attempts>=3) continue;
+      const claimed = await rpc('claim_discord_dm_delivery',{p_event_id:event.id,p_discord_user_id:link.discord_user_id});
+      if (claimed !== true) continue;
       try {
-        await db('discord_dm_deliveries',{method:'POST',body:{event_id:event.id,discord_user_id:link.discord_user_id,status:'pending',attempts:(previous[0]?.attempts||0)+1,updated_at:new Date().toISOString()}});
         await sendDiscordDM(link.discord_user_id,event);
         await db('discord_dm_deliveries',{method:'PATCH',query:'?event_id=eq.'+event.id+'&discord_user_id=eq.'+link.discord_user_id,body:{status:'sent',delivered_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
       } catch (e) {
