@@ -124,7 +124,17 @@ async function handle(interaction) {
   if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
-  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: ' + (apiReady() ? 'настроен (подключение ещё не проверено)' : 'не настроен') + '\nИзменение данных: отключено\nЛичные уведомления: отключены');
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') {
+    const perms = BigInt(interaction.member?.permissions || '0');
+    if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Диагностика доступна только администраторам сервера.');
+    if (!apiReady()) return ephem('**SCUM HUB · диагностика**\\nSupabase: переменные отсутствуют.');
+    try {
+      const check = await db('members', { query: '?select=id&limit=1' });
+      return ephem('**SCUM HUB · диагностика**\\nDiscord: подключён\\nSupabase: подключён (запрос выполнен)\\nИзменение данных: отключено\\nЛичные уведомления: отключены');
+    } catch (error) {
+      return ephem('**SCUM HUB · диагностика**\\nSupabase: ошибка соединения (' + String(error.message).slice(0,100) + ')');
+    }
+  }
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
     const p = BigInt(interaction.member?.permissions || '0');
     if ((p & 0x8n) === 0n && (p & 0x20n) === 0n) return ephem('Недостаточно прав.');
@@ -277,7 +287,7 @@ http.createServer(async (req, res) => {
   void registerGuildCommand();
 });
 
-if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false') {
+if (false && process.env.DISCORD_DM_NOTIFICATIONS === 'true') {
   setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
   console.log('[discord] DM notifications enabled');
 }
