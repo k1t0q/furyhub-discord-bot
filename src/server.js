@@ -123,6 +123,27 @@ async function sendDiscordDM(userId, event) {
   });
   if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
 }
+async function queueExpiredProtectNotifications(launchAt) {
+  const rows = await db('protect_updates',{query:'?select=id,squad_id,updated_at,effective_at&order=updated_at.desc&limit=500'});
+  const latestBySquad = new Map();
+  for (const item of rows) if (!latestBySquad.has(item.squad_id)) latestBySquad.set(item.squad_id,item);
+  let queued = 0;
+  const now = Date.now();
+  const since = Date.parse(launchAt);
+  for (const item of latestBySquad.values()) {
+    const base = Date.parse(item.effective_at || item.updated_at);
+    if (!Number.isFinite(base)) continue;
+    const expired = base + 540 * 60000;
+    if (expired > now || expired < since) continue;
+    const result = await db('squad_notification_events',{
+      method:'POST',
+      query:'?on_conflict=source_key',
+      body:{squad_id:item.squad_id,category:'protect',actor_id:null,title:'ПРОТЕКТ СПАЛ',body:'Защита базы закончилась в '+protectClock(expired)+'.\nБаза осталась без протекта!',source_key:'protect-expired:'+item.id}
+    });
+    if (result.length) queued++;
+  }
+  return queued;
+}
 let discordDmPolling = false;
 async function processDiscordNotifications() {
   if (discordDmPolling) return;
@@ -144,6 +165,8 @@ async function processDiscordNotifications() {
   discordDmPolling = true;
   const stats = { events: 0, links: 0, enabled: 0, candidates: 0, claimed: 0, sent: 0, failed: 0, ignoredActor: 0, ignoredCategory: 0, ignoredSquad: 0, unclaimed: 0 };
   try {
+    const expiredQueued = await queueExpiredProtectNotifications(launchAt);
+    if (expiredQueued) console.log('[discord] Protect expired notices queued:', expiredQueued);
     const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
     stats.events = events.length;
     if (!events.length) return;
