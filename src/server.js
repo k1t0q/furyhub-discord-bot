@@ -130,6 +130,16 @@ async function processDiscordNotifications() {
   } finally { discordDmPolling = false; }
 }
 
+async function sectionProtect(interaction,m) {
+  const p=await db('protect_updates',{query:'?squad_id=eq.'+m.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
+  const last=p[0];
+  const buttons=admin(m)?[row(button('Обновил протект','fury:protect:update',3),button('Изменить время начала','fury:protect:set-start',2))]:[];
+  if(!last)return ephem('**ПРОТЕКТ**\\nПока нет обновлений.',buttons);
+  const author=last.member_id?await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}):[];
+  const base=new Date(last.effective_at||last.updated_at);
+  const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+  return ephem('**ПРОТЕКТ**\\nПоследнее обновление:\\n**'+(author[0]?.nick||'Участник')+' · '+new Date(last.updated_at).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\\nНачало: **'+clock(60)+'**\\nСпадёт: **'+clock(540)+'**',buttons);
+}
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
@@ -165,7 +175,18 @@ async function handle(interaction) {
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
   }
-  if (interaction.type !== InteractionType.MESSAGE_COMPONENT || !String(interaction.data?.custom_id||'').startsWith('fury:')) return ephem('Неизвестная команда.');
+  const customId=String(interaction.data?.custom_id||'');
+  if (interaction.type === 5 && customId === 'fury:protect:set-start') {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
+    const member=await linked(interaction);
+    if (!member || !admin(member)) return ephem('Изменять время протекта может только администратор с привязанным аккаунтом.');
+    const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
+    if (!/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return ephem('Введите время в формате ЧЧ:ММ, например 08:45.');
+    const ok=await rpc('discord_set_protect_start',{p_discord_user_id:interaction.member?.user?.id||interaction.user?.id,p_start_time:time});
+    if(ok!==true)return ephem('Не удалось изменить время начала протекта.');
+    return await sectionProtect(interaction,member);
+  }
+  if (interaction.type !== InteractionType.MESSAGE_COMPONENT || !customId.startsWith('fury:')) return ephem('Неизвестная команда.');
   const m = await linked(interaction);
   if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
   const selection = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
@@ -186,19 +207,16 @@ async function handle(interaction) {
     return ephem('**Моё участие · сегодня**\n'+(lines.join('\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4))]);
   }
   if (section==='protect') {
+    if(action==='set-start') {
+      if(!admin(m)) return ephem('Изменять время протекта может только администратор.');
+      return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить начало протекта',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время начала (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
+    }
     if(action==='update') {
       if(!admin(m)) return ephem('Обновление протекта доступно только администратору.');
-      const updated = await rpc('discord_update_protect',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
-      if (updated !== true) return ephem('Протект уже обновляли за последние 30 секунд или недостаточно прав.');
-      return ephem('Протект обновлён. Изменение сохранено на сайте.');
+      const updated=await rpc('discord_update_protect',{p_discord_user_id:interaction.member?.user?.id||interaction.user?.id});
+      if(updated!==true)return ephem('Протект уже обновляли за последние 30 секунд или недостаточно прав.');
     }
-    const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
-    const last=p[0];
-    if(!last) return ephem('**ПРОТЕКТ**\nПока нет обновлений.',admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
-    const author=last.member_id?await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}):[];
-    const base=new Date(last.effective_at||last.updated_at);
-    const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
-    return ephem('**ПРОТЕКТ**\nПоследнее обновление:\n**'+(author[0]?.nick||'Участник')+' · '+clock(0)+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
+    return await sectionProtect(interaction,m);
   }
   if (section==='raids') {
     const raids=await db('raids',{query:squad+'&select=id,title,raid_date,raid_time&order=created_at.desc&limit=8'});
