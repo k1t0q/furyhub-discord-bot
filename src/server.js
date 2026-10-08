@@ -47,7 +47,11 @@ async function registerGuildCommand() {
   const appId = process.env.DISCORD_APPLICATION_ID;
   const guildId = process.env.DISCORD_GUILD_ID;
   if (!token || !appId || !guildId) {
-    console.warn('[discord] /fury registration skipped: missing bot token, application ID or guild ID');
+    console.warn('[discord] /fury registration skipped: missing environment variables', {
+      DISCORD_BOT_TOKEN: Boolean(token),
+      DISCORD_APPLICATION_ID: Boolean(appId),
+      DISCORD_GUILD_ID: Boolean(guildId)
+    });
     return;
   }
   try {
