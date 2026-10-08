@@ -133,12 +133,12 @@ async function processDiscordNotifications() {
 async function sectionProtect(interaction,m) {
   const p=await db('protect_updates',{query:'?squad_id=eq.'+m.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
   const last=p[0];
-  const buttons=admin(m)?[row(button('Обновил протект','fury:protect:update',3),button('Изменить время начала','fury:protect:set-start',2))]:[];
-  if(!last)return ephem('**ПРОТЕКТ**\\nПока нет обновлений.',buttons);
+  const buttons=admin(m)?[row(button('Обновить протект','fury:protect:update',3),button('Изменить время начала','fury:protect:set-start',2))]:[];
+  if(!last)return ephem('**ПРОТЕКТ**\nПока нет обновлений.',buttons);
   const author=last.member_id?await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}):[];
   const base=new Date(last.effective_at||last.updated_at);
   const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
-  return ephem('**ПРОТЕКТ**\\nПоследнее обновление:\\n**'+(author[0]?.nick||'Участник')+' · '+new Date(last.updated_at).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\\nНачало: **'+clock(60)+'**\\nСпадёт: **'+clock(540)+'**',buttons);
+  return ephem('**ПРОТЕКТ**\nПоследнее обновление:\n**'+(author[0]?.nick||'Участник')+' · '+new Date(last.updated_at).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',buttons);
 }
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
@@ -174,6 +174,10 @@ async function handle(interaction) {
       ? ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.')
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
+  }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:protect:set-start') {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
+    return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить начало протекта',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время начала (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
   }
   const customId=String(interaction.data?.custom_id||'');
   if (interaction.type === 5 && customId === 'fury:protect:set-start') {
@@ -339,7 +343,7 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
-    const isDeferred = interaction.type === InteractionType.MESSAGE_COMPONENT ||
+    const isDeferred = (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id !== 'fury:protect:set-start') ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
