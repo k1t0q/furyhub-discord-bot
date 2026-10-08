@@ -35,6 +35,7 @@ const panel = (publicPost = false) => ({
         { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот через Ctrl+V', emoji: { name: '📦' } },
         { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот через Ctrl+V', emoji: { name: '🏠' } }
       ] }),
+      row(button('Добавить схрон', 'fury:add-stash', 2), button('Добавить базу', 'fury:add-base', 2)),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
