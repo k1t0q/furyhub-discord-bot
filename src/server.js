@@ -282,7 +282,7 @@ async function handle(interaction) {
     const selected = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
     const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
-    const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\\nНапиши название и прикрепи скриншот через **Ctrl + V** в **одном сообщении**. Затем нажми Enter.\\n\\nДля отмены напиши **отмена**.');
+    const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот через **Ctrl + V** в одном сообщении. Затем нажми Enter.\n\n*Для отмены напиши «отмена».*');
     return ephem(dm ? 'Открой личные сообщения с ботом. Отправь название и скриншот одним сообщением.' : 'Не удалось отправить личное сообщение. Разреши ЛС от участников сервера и выбери пункт ещё раз.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
