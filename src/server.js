@@ -274,6 +274,14 @@ async function handle(interaction) {
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
   }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel') {
+    const uid=String(interaction.member?.user?.id || interaction.user?.id || '');
+    if(!/^\d{15,22}$/.test(uid))return ephem('Не удалось определить аккаунт Discord.');
+    const existing=await db('discord_place_drafts',{query:'?discord_user_id=eq.'+uid+'&select=discord_user_id&limit=1'});
+    if(!existing.length)return ephem('Нет активного добавления.');
+    await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
+    return {type:7,data:{content:'Добавление отменено.',components:[]}};
+  }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && (['fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id) || (interaction.data?.custom_id === 'fury:menu' && ['fury:add-stash','fury:add-base'].includes(interaction.data?.values?.[0])))) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member = await linked(interaction);
@@ -282,7 +290,7 @@ async function handle(interaction) {
     const selected = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
     const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
-    const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот через **Ctrl + V** в одном сообщении. Затем нажми Enter.\n\n*Для отмены напиши «отмена».*');
+    const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот через **Ctrl + V** в одном сообщении. Затем нажми Enter.',true);
     return ephem(dm ? 'Открой личные сообщения с ботом. Отправь название и скриншот одним сообщением.' : 'Не удалось отправить личное сообщение. Разреши ЛС от участников сервера и выбери пункт ещё раз.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
@@ -477,7 +485,7 @@ http.createServer(async (req, res) => {
   try {
     const interaction = JSON.parse(body.toString('utf8'));
     const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
-      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) ||
+      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
@@ -526,7 +534,7 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 }
 
 // Gateway is required to receive screenshots pasted into direct messages.
-async function discordSendTextDM(userId,content) {
+async function discordSendTextDM(userId,content,withCancel=false) {
   const token=process.env.DISCORD_BOT_TOKEN;
   if(!token)return false;
   try {
@@ -534,7 +542,7 @@ async function discordSendTextDM(userId,content) {
     const channel=await fetch('https://discord.com/api/v10/users/@me/channels',{method:'POST',headers,body:JSON.stringify({recipient_id:userId}),signal:AbortSignal.timeout(10000)});
     if(!channel.ok)throw Error('DM channel '+channel.status);
     const {id}=await channel.json();
-    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content}),signal:AbortSignal.timeout(10000)});
+    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content,...(withCancel?{components:[{type:1,components:[{type:2,style:4,label:'Отмена',custom_id:'fury:place-cancel'}]}]}:{})}),signal:AbortSignal.timeout(10000)});
     if(!sent.ok)throw Error('DM send '+sent.status);
     return true;
   }catch(err){console.error('[discord] Place DM:',err.message);return false;}
