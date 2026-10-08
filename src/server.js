@@ -70,7 +70,7 @@ async function linked(interaction) {
   return members[0] || null;
 }
 const admin = m => ['admin','owner','leader'].includes(String(m?.access_role || '').toLowerCase());
-const moscowDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const moscowDay = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).filter(p => p.type !== 'literal').map(p => [p.type, p.value])); return `${parts.year}-${parts.month}-${parts.day}`; };
 const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
 const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, raid: 0xb32932, task: 0x458ac9, stash: 0xd69d41 };
@@ -94,7 +94,7 @@ async function sendDiscordDM(userId, event) {
   if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
 }
 async function processDiscordNotifications() {
-  if (!apiReady() || !process.env.DISCORD_BOT_TOKEN) return;
+  if (!apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_DM_NOTIFICATIONS !== 'true' || process.env.DISCORD_TEST_MODE !== 'false') return;
   const events = await db('squad_notification_events',{query:'?select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
   if (!events.length) return;
   const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
