@@ -20,15 +20,15 @@ const panel = (publicPost = false) => ({
       description: '**Панель управления отрядом**\nВыбери раздел ниже. Все данные синхронизируются с ДУБЛЬ.',
       color: 0xb32932,
       fields: [
-        { name: '01  ·  ОТРЯД', value: 'Участие в рейде, протект и ближайшие рейды.', inline: false },
-        { name: '02  ·  ОПЕРАЦИИ', value: 'Задачи и запасы взрывчатки.', inline: false },
+        { name: '01  ·  ОТРЯД', value: 'Моё участие и протект.', inline: false },
+        { name: '02  ·  ОПЕРАЦИИ', value: 'Рейды, задачи и запасы взрывчатки.', inline: false },
         { name: '03  ·  ТРЕВОГА', value: 'Экстренное оповещение отряда.', inline: false }
       ],
       footer: { text: 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
     components: [
-      row(button('УЧАСТИЕ', 'fury:presence', 2), button('ПРОТЕКТ', 'fury:protect', 2), button('РЕЙДЫ', 'fury:raids', 2)),
-      row(button('ЗАДАЧИ', 'fury:tasks', 2), button('ВЗРЫВ', 'fury:explosives', 2)),
+      row(button('УЧАСТИЕ', 'fury:presence', 2), button('ПРОТЕКТ', 'fury:protect', 2)),
+      row(button('РЕЙДЫ', 'fury:raids', 2), button('ЗАДАЧИ', 'fury:tasks', 2), button('ВЗРЫВ', 'fury:explosives', 2)),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4)),
       row({ type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
