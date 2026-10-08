@@ -599,7 +599,7 @@ function startDiscordGateway() {
       if(packet.op===7 || packet.op===9)socket.close();
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
         console.error('[discord] Screenshot:',err.message);
-        if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить скриншот. Попробуй отправить его ещё раз.');
+        if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить запись. Попробуй ещё раз. Если ошибка повторится, отправь администратору логи Layero с пометкой [discord] Screenshot.');
       });
     });
     socket.on('error',err=>console.error('[discord] Gateway:',err.message));
