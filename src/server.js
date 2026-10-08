@@ -15,7 +15,8 @@ const panel = (publicPost = false) => ({
   type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
   data: {
     ...(publicPost ? {} : { flags: 64 }),
-    embeds: [{ image: { url: 'https://furyhub-discord-bot-main.layero.app/banner.png' }, color: 0xb32932 }, {
+    embeds: [{
+      image: { url: 'https://furyhub-discord-bot-main.layero.app/banner.png' },
       author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
       description: '**Управление отрядом в Discord**\nАктуальные данные из ДУБЛЬ. Выбери нужный раздел ниже.',
@@ -63,7 +64,7 @@ async function rpc(name, payload) {
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(8000)
   });
-  if (!res.ok) throw Error('RPC failed (' + res.status + ')');
+  if (!res.ok) { const detail = (await res.text()).slice(0,800); throw Error('RPC ' + name + ' failed (' + res.status + '): ' + detail); }
   return res.json();
 }
 async function linked(interaction) {
@@ -187,7 +188,7 @@ async function handle(interaction) {
     const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return ephem('Введите время ЧЧ:ММ, например 20:30.');
     await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:member.squad_id,member_id:member.id,day:moscowDay(),status:'Буду',join_time:time,updated_at:new Date().toISOString()}});
-    return ephem('**Моё участие · сегодня**\\nСтатус: **Буду**\\nВремя захода: **'+time+' МСК**\\nСохранено на сайте ДУБЛЬ.',[row(button('Изменить время','fury:presence:change-time'))]);
+    return ephem('**Моё участие · сегодня**\nСтатус: **Буду**\nВремя захода: **'+time+' МСК**\nСохранено на сайте ДУБЛЬ.',[row(button('Изменить время','fury:presence:change-time'))]);
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:protect:set-start') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
@@ -385,7 +386,7 @@ http.createServer(async (req, res) => {
         reply = await handle(interaction);
       } catch (error) {
         console.error('[discord] deferred interaction failed:', error?.message || 'Unknown error');
-        reply = ephem('Не удалось выполнить действие. Попробуй позже.');
+        reply = ephem('Не удалось выполнить действие. Проверь логи бота в Layero.');
       }
       const data = reply?.data || { content: 'Не удалось получить ответ.' };
       try {
