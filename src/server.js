@@ -55,10 +55,23 @@ http.createServer(async (req, res) => {
   const body = Buffer.concat(chunks);
   const signature = req.headers['x-signature-ed25519'];
   const timestamp = req.headers['x-signature-timestamp'];
-  if (typeof signature !== 'string' || typeof timestamp !== 'string' || !verifyKey(body, signature, timestamp, publicKey)) {
+  let signatureValid = false;
+  try {
+    if (typeof signature === 'string' && typeof timestamp === 'string') {
+      signatureValid = verifyKey(body, signature, timestamp, publicKey);
+    }
+  } catch (error) {
+    console.warn('[discord] malformed signature rejected', { error: error?.name || 'Error' });
+  }
+  if (!signatureValid) {
     console.warn('[discord] rejected signature', { signaturePresent: typeof signature === 'string', timestampPresent: typeof timestamp === 'string', keyLength: publicKey.length });
     return json(res, 401, { error: 'Invalid signature' });
   }
-  try { const interaction = JSON.parse(body.toString('utf8')); console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null }); return json(res, 200, response(interaction)); }
+  try {
+    const interaction = JSON.parse(body.toString('utf8'));
+    const reply = response(interaction);
+    console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null, responseType: reply.type, responseData: interaction.type === InteractionType.PING ? JSON.stringify(reply) : undefined });
+    return json(res, 200, reply);
+  }
   catch (error) { console.error('Interaction error', error); return json(res, 500, { error: 'Internal error' }); }
 }).listen(port, '0.0.0.0', () => console.log('FURY HUB Discord interactions listening on port', port));
