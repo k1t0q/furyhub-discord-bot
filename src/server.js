@@ -194,8 +194,7 @@ async function handle(interaction) {
       const id=action.slice(5);if(!/^\d+$/.test(id))return ephem('Неверный рейд.');
       const found=raids.find(x=>String(x.id)===id);
       if(!found)return ephem('Рейд не найден в списке.');
-      const prior=await db('raid_participants',{query:'?raid_id=eq.'+id+'&member_id=eq.'+m.id+'&select=raid_id'});
-      if(!prior.length)await db('raid_participants',{method:'POST',body:{raid_id:Number(id),member_id:m.id}});
+      await db('raid_participants',{method:'POST',body:{raid_id:Number(id),member_id:m.id}});
       return ephem('Ты записан на рейд «'+found.title+'».');
     }
     return ephem('**Рейды**\n'+(raids.map(x=>'#'+x.id+' · '+x.title+' · '+(x.raid_date||'')+' '+(x.raid_time||'').slice(0,5)).join('\n')||'Рейдов пока нет.')+'\nДля создания и редактирования рейдов используй сайт.',raids.slice(0,4).map(x=>row(button('Участвовать #'+x.id,'fury:raids:join-'+x.id,3))));
