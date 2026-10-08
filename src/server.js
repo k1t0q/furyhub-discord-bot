@@ -241,7 +241,8 @@ async function sectionProtect(interaction,m) {
 }
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
-  if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
+  const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
+  if (allowedGuild && interaction.guild_id !== allowedGuild && !(isPlaceCancel && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') {
