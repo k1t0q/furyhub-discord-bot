@@ -93,10 +93,14 @@ async function sendDiscordDM(userId, event) {
   });
   if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
 }
+let discordDmPolling = false;
 async function processDiscordNotifications() {
+  if (discordDmPolling) return;
   if (!apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_DM_NOTIFICATIONS !== 'true' || process.env.DISCORD_TEST_MODE !== 'false') return;
   const launchAt = process.env.DISCORD_DM_START_AT;
   if (!launchAt || !Number.isFinite(Date.parse(launchAt))) return;
+  discordDmPolling = true;
+  try {
   const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,created_at&order=id.desc&limit=60'});
   if (!events.length) return;
   const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
@@ -122,6 +126,7 @@ async function processDiscordNotifications() {
       }
     }
   }
+  } finally { discordDmPolling = false; }
 }
 
 async function handle(interaction) {
@@ -324,7 +329,7 @@ http.createServer(async (req, res) => {
   void registerGuildCommand();
 });
 
-if (false && process.env.DISCORD_DM_NOTIFICATIONS === 'true') {
+if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && process.env.DISCORD_DM_START_AT && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT))) {
   setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
   console.log('[discord] DM notifications enabled');
 }
