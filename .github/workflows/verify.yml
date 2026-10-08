@@ -1,0 +1,19 @@
+name: Verify Discord bot
+on:
+  push:
+    branches: [main, feature/discord-full-integration]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --ignore-scripts
+      - run: npm run check
