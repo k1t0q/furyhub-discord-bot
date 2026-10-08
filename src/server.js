@@ -58,7 +58,7 @@ http.createServer(async (req, res) => {
   let signatureValid = false;
   try {
     if (typeof signature === 'string' && typeof timestamp === 'string') {
-      signatureValid = verifyKey(body, signature, timestamp, publicKey);
+      signatureValid = (await verifyKey(body, signature, timestamp, publicKey)) === true;
     }
   } catch (error) {
     console.warn('[discord] malformed signature rejected', { error: error?.name || 'Error' });
