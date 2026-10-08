@@ -206,7 +206,8 @@ async function handle(interaction) {
       const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id'});
       if(!task.length)return ephem('Задача не найдена.');
       if(task[0].assignee_id && task[0].assignee_id!==m.id)return ephem('Задача уже назначена другому участнику.');
-      await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
+      const updatedTasks = await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
+      if (!updatedTasks.length) return ephem('Задачу уже забрал другой участник. Обнови список.');
       return ephem('Задача взята в работу.');
     }
     const tasks=await db('tasks',{query:squad+'&select=id,title,status,assignee_id&order=created_at.desc&limit=8'});
