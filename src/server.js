@@ -1,4 +1,6 @@
 import http from 'node:http';
+import WebSocket from 'ws';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
 
@@ -34,7 +36,9 @@ const panel = (publicPost = false) => ({
         { label: 'Протект', value: 'fury:protect', description: 'Время и обновление протекта', emoji: { name: '🛡️' } },
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
-        { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
+        { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } },
+        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот через Ctrl+V', emoji: { name: '📦' } },
+        { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот через Ctrl+V', emoji: { name: '🏠' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
@@ -275,6 +279,25 @@ async function handle(interaction) {
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
   }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id)) {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
+    const member = await linked(interaction);
+    if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    const kind = interaction.data.custom_id === 'fury:add-stash' ? 'stash' : 'base';
+    return {type:9,data:{custom_id:'fury:place-title:'+kind,title:kind==='stash'?'Добавить схрон':'Добавить базу',components:[{type:1,components:[{type:4,custom_id:'place_title',label:'Название',style:1,min_length:1,max_length:150,required:true,placeholder:'Введите название'}]}]}};
+  }
+  if (interaction.type === 5 && /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||'')) {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
+    const member = await linked(interaction);
+    if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    const uid = String(interaction.member?.user?.id || interaction.user?.id || '');
+    const kind = interaction.data.custom_id.split(':')[2];
+    const title = String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
+    if (!title || title.length > 150) return ephem('Укажи название до 150 символов.');
+    await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title,created_at:new Date().toISOString()}});
+    const dm = await discordSendTextDM(uid,'**'+(kind==='stash'?'Новый схрон':'Новая база')+': '+title+'**\nВставь скриншот через **Ctrl + V** в этот личный чат и отправь. После загрузки он появится на сайте ДУБЛЬ.\nЧтобы отменить, напиши **отмена**.');
+    return ephem(dm ? 'Название сохранено. Открой личные сообщения с ботом и отправь скриншот через Ctrl + V.' : 'Название сохранено, но бот не смог открыть личные сообщения. Разреши ЛС от участников сервера и повтори попытку.');
+  }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
     return {type:9,data:{custom_id:'fury:presence:save-time',title:'Время захода в SCUM',components:[{type:1,components:[{type:4,custom_id:'join_time',label:'Время захода (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'20:30'}]}]}};
@@ -514,3 +537,84 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
   setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
   console.log('[discord] DM notifications enabled');
 }
+
+// Gateway is required to receive screenshots pasted into direct messages.
+async function discordSendTextDM(userId,content) {
+  const token=process.env.DISCORD_BOT_TOKEN;
+  if(!token)return false;
+  try {
+    const headers={Authorization:'Bot '+token,'Content-Type':'application/json'};
+    const channel=await fetch('https://discord.com/api/v10/users/@me/channels',{method:'POST',headers,body:JSON.stringify({recipient_id:userId}),signal:AbortSignal.timeout(10000)});
+    if(!channel.ok)throw Error('DM channel '+channel.status);
+    const {id}=await channel.json();
+    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content}),signal:AbortSignal.timeout(10000)});
+    if(!sent.ok)throw Error('DM send '+sent.status);
+    return true;
+  }catch(err){console.error('[discord] Place DM:',err.message);return false;}
+}
+async function receivePlaceScreenshot(message) {
+  if(!message || message.guild_id || message.author?.bot)return;
+  const uid=String(message.author?.id||'');
+  if(!/^\d{15,22}$/.test(uid))return;
+  const drafts=await db('discord_place_drafts',{query:'?discord_user_id=eq.'+uid+'&select=discord_user_id,member_id,squad_id,kind,title,created_at&limit=1'});
+  const draft=drafts[0];
+  if(!draft)return;
+  if(Date.now()-Date.parse(draft.created_at)>86400000){
+    await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
+    await discordSendTextDM(uid,'Время ожидания скриншота истекло. Начни добавление заново через /fury.');
+    return;
+  }
+  if(String(message.content||'').trim().toLowerCase()==='отмена'){
+    await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
+    await discordSendTextDM(uid,'Добавление отменено.');
+    return;
+  }
+  const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
+  if(!attachment){await discordSendTextDM(uid,'Отправь изображение: вставь скриншот через **Ctrl + V** и нажми Enter.');return;}
+  if(attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
+  const link=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&member_id=eq.'+draft.member_id+'&select=member_id&limit=1'});
+  if(!link.length){await discordSendTextDM(uid,'Привязка аккаунта изменилась. Добавление отменено.');return;}
+  const token=process.env.DISCORD_BOT_TOKEN;
+  const download=await fetch(attachment.url,{headers:{Authorization:'Bot '+token},signal:AbortSignal.timeout(15000)});
+  if(!download.ok)throw Error('Screenshot download '+download.status);
+  const bytes=Buffer.from(await download.arrayBuffer());
+  if(bytes.length>10*1024*1024)throw Error('Screenshot too large');
+  const ext=attachment.content_type==='image/jpeg'?'jpg':attachment.content_type==='image/webp'?'webp':attachment.content_type==='image/gif'?'gif':'png';
+  const mime=ext==='jpg'?'image/jpeg':'image/'+ext;
+  const objectPath=draft.squad_id+'/'+randomUUID()+'.'+ext;
+  const storage=await fetch(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/squad-place-images/'+objectPath,{
+    method:'POST',headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':mime,'x-upsert':'false'},body:bytes,signal:AbortSignal.timeout(20000)
+  });
+  if(!storage.ok)throw Error('Screenshot storage '+storage.status+': '+(await storage.text()).slice(0,150));
+  const imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
+  await db('squad_places',{method:'POST',body:{squad_id:draft.squad_id,kind:draft.kind,images:[imageUrl],comment:draft.title,updated_by:draft.member_id,updated_at:new Date().toISOString()}});
+  await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
+  await discordSendTextDM(uid,'**'+(draft.kind==='stash'?'Схрон':'База')+' добавлен'+(draft.kind==='stash'?'':'а')+'!**\nНазвание: **'+draft.title+'**\nСкриншот сохранён на сайте ДУБЛЬ.');
+}
+function startDiscordGateway() {
+  if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
+  let socket,heartbeat,sequence=null,backoff=3000;
+  const connect=()=>{
+    socket=new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
+    socket.on('message',raw=>{
+      let packet;try{packet=JSON.parse(raw.toString())}catch{return}
+      if(packet.s!==null && packet.s!==undefined)sequence=packet.s;
+      if(packet.op===10){
+        clearInterval(heartbeat);
+        heartbeat=setInterval(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));},packet.d.heartbeat_interval);
+        socket.send(JSON.stringify({op:2,d:{token:process.env.DISCORD_BOT_TOKEN,intents:4096,properties:{os:'linux',browser:'scum-hub',device:'scum-hub'}}}));
+        backoff=3000;
+      }
+      if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
+      if(packet.op===7 || packet.op===9)socket.close();
+      if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
+        console.error('[discord] Screenshot:',err.message);
+        if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить скриншот. Попробуй отправить его ещё раз.');
+      });
+    });
+    socket.on('error',err=>console.error('[discord] Gateway:',err.message));
+    socket.on('close',()=>{clearInterval(heartbeat);setTimeout(connect,backoff).unref();backoff=Math.min(backoff*2,60000);});
+  };
+  connect();
+}
+startDiscordGateway();
