@@ -124,6 +124,7 @@ async function handle(interaction) {
   if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: ' + (apiReady() ? 'настроен (подключение ещё не проверено)' : 'не настроен') + '\nИзменение данных: отключено\nЛичные уведомления: отключены');
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
     const p = BigInt(interaction.member?.permissions || '0');
     if ((p & 0x8n) === 0n && (p & 0x20n) === 0n) return ephem('Недостаточно прав.');
@@ -225,7 +226,7 @@ async function registerGuildCommand() {
     const result = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }]),
+      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }, { name: 'status', description: 'Проверить состояние интеграции SCUM HUB', type: 1 }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
@@ -270,7 +271,7 @@ http.createServer(async (req, res) => {
     console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null, responseType: reply.type, responseData: interaction.type === InteractionType.PING ? JSON.stringify(reply) : undefined });
     return json(res, 200, reply);
   }
-  catch (error) { console.error('Interaction error', error); return json(res, 500, { error: 'Internal error' }); }
+  catch (error) { console.error('Interaction error', error?.message || 'Unknown error'); return json(res, 200, ephem('Не удалось выполнить действие. Проверь логи бота или попробуй позже.')); }
 }).listen(port, '0.0.0.0', () => {
   console.log('FURY HUB Discord interactions listening on port', port);
   void registerGuildCommand();
