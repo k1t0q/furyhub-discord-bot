@@ -75,7 +75,7 @@ async function linked(interaction) {
   return members[0] || null;
 }
 const admin = m => ['admin','owner','leader'].includes(String(m?.access_role || '').toLowerCase());
-const moscowDay = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).filter(p => p.type !== 'literal').map(p => [p.type, p.value])); return `${parts.year}-${parts.month}-${parts.day}`; };
+const moscowDay = () => { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).filter(p => p.type !== 'literal').map(p => [p.type, p.value])); const day = new Date(Date.UTC(Number(parts.year), Number(parts.month)-1, Number(parts.day))); if (Number(parts.hour) < 5) day.setUTCDate(day.getUTCDate()-1); return day.toISOString().slice(0,10); };
 const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
 
 const dmColors = { alarm: 0xd02b37, protect: 0xe2a13a, protect_updated: 0xe2a13a, raids: 0xb32932, tasks: 0x458ac9, stash: 0xd69d41, presence: 0x458ac9, posts: 0x458ac9 };
