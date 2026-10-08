@@ -31,26 +31,120 @@ const panel = (publicPost = false) => ({
     ]
   }
 });
-function response(interaction) {
-  // Discord's endpoint validation PING has no guild_id; acknowledge it before guild restrictions.
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const apiReady = () => Boolean(supabaseUrl && serviceKey);
+const ephem = (content, components = []) => ({ type: 4, data: { flags: 64, content: String(content).slice(0,1900), components } });
+const row = (...buttons) => ({ type: 1, components: buttons });
+async function db(table, options = {}) {
+  if (!apiReady()) throw Error('Supabase server configuration missing');
+  const { method = 'GET', query = '', body } = options;
+  const res = await fetch(supabaseUrl.replace(/\\/$/, '') + '/rest/v1/' + table + query, {
+    method, headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json', Prefer: 'return=representation,resolution=merge-duplicates' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(8000)
+  });
+  if (!res.ok) throw Error('Database request failed (' + res.status + ')');
+  const text = await res.text(); return text ? JSON.parse(text) : [];
+}
+async function linked(interaction) {
+  const id = interaction.member?.user?.id || interaction.user?.id;
+  if (!id || !/^\\d{15,22}$/.test(id)) return null;
+  const links = await db('discord_member_links', { query: '?discord_user_id=eq.' + id + '&select=member_id' });
+  if (!links.length) return null;
+  const members = await db('members', { query: '?id=eq.' + links[0].member_id + '&select=id,squad_id,nick,access_role' });
+  return members[0] || null;
+}
+const admin = m => ['admin','owner','leader'].includes(String(m?.access_role || '').toLowerCase());
+const moscowDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const fmt = x => x ? new Date(x).toLocaleString('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
-  if (allowedGuild && interaction.guild_id !== allowedGuild) {
-    return { type: 4, data: { flags: 64, content: 'Бот пока доступен только на тестовом сервере.' } };
-  }
-  if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'fury') return panel();
-  if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'setup') {
-    const permissions = BigInt(interaction.member?.permissions || '0');
-    if ((permissions & 0x8n) === 0n && (permissions & 0x20n) === 0n) {
-      return { type: 4, data: { flags: 64, content: 'Для публикации панели нужны права администратора или управления сервером.' } };
-    }
+  if (allowedGuild && interaction.guild_id !== allowedGuild) return ephem('Бот доступен только на сервере отряда.');
+  const name = interaction.data?.name;
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
+    const p = BigInt(interaction.member?.permissions || '0');
+    if ((p & 0x8n) === 0n && (p & 0x20n) === 0n) return ephem('Недостаточно прав.');
     return panel(true);
   }
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id || '').startsWith('fury:')) {
-    const labels = { presence: 'Моё участие', protect: 'Протект', raids: 'Рейды', tasks: 'Задачи', explosives: 'ВЗРЫВ', alarm: 'Нас рейдят' };
-    const section = String(interaction.data.custom_id).split(':')[1];
-    return { type: 4, data: { flags: 64, content: '**' + (labels[section] || 'FURY HUB') + '**\nТестовая панель работает. Подключение к Supabase будет следующим этапом; никаких изменений пока не сделано.' } };
+  if (!apiReady()) return ephem('Интеграция с сайтом ещё не настроена. Администратор должен добавить SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY в Layero.');
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'link') {
+    const code = String(interaction.data?.options?.find(x=>x.name==='code')?.value || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{36}$/.test(code)) return ephem('Неверный формат кода. Получи новый код в настройках сайта.');
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(code).digest('hex');
+    const codes = await db('discord_link_codes', { query: '?code_hash=eq.' + hash + '&used_at=is.null&expires_at=gt.' + encodeURIComponent(new Date().toISOString()) + '&select=member_id,code_hash' });
+    if (!codes.length) return ephem('Код недействителен или срок его действия истёк.');
+    const uid = interaction.member?.user?.id || interaction.user?.id;
+    const current = await db('discord_member_links', { query: '?member_id=eq.' + codes[0].member_id + '&select=discord_user_id' });
+    if (current.length && current[0].discord_user_id !== uid) return ephem('Этот аккаунт уже привязан к другому Discord. Обратись к администратору.');
+    await db('discord_member_links', { method: 'POST', body: { discord_user_id: uid, member_id: codes[0].member_id } });
+    await db('discord_link_codes', { method: 'PATCH', query: '?code_hash=eq.' + hash + '&used_at=is.null', body: { used_at: new Date().toISOString() } });
+    return ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.');
   }
-  return { type: 4, data: { flags: 64, content: 'Неизвестная команда.' } };
+  if (interaction.type !== InteractionType.MESSAGE_COMPONENT || !String(interaction.data?.custom_id||'').startsWith('fury:')) return ephem('Неизвестная команда.');
+  const m = await linked(interaction);
+  if (!m) return ephem('Сначала привяжи аккаунт: открой сайт ДУБЛЬ → Настройки → Привязать Discord, затем используй /link.');
+  const [,section,action] = interaction.data.custom_id.split(':');
+  const squad = '?squad_id=eq.' + m.squad_id;
+  if (section === 'presence') {
+    if (['Буду','Под вопросом','Не буду'].includes(action)) {
+      const date = moscowDay();
+      const old = await db('presence_history',{query:'?member_id=eq.'+m.id+'&day=eq.'+date+'&select=join_time'});
+      await db('presence_history',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id,day:date,status:action,join_time:action==='Буду'?(old[0]?.join_time||'20:00'):null,updated_at:new Date().toISOString()}});
+      return ephem('Статус обновлён: **'+action+'**. Время захода можно уточнить на сайте.');
+    }
+    const today=await db('presence_history',{query:squad+'&day=eq.'+moscowDay()+'&select=member_id,status,join_time'});
+    const members=await db('members',{query:squad+'&select=id,nick'});
+    const lines=today.map(p=>(members.find(x=>x.id===p.member_id)?.nick||'Участник')+' — '+p.status+(p.join_time?' ('+p.join_time.slice(0,5)+')':''));
+    return ephem('**Моё участие · сегодня**\\n'+(lines.join('\\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4))]);
+  }
+  if (section==='protect') {
+    if(action==='update') {
+      if(!admin(m)) return ephem('Обновление протекта доступно только администратору.');
+      await db('protect_updates',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id}});
+      return ephem('Протект обновлён. Изменение сохранено на сайте.');
+    }
+    const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
+    return ephem('**Протект**\\nПоследнее обновление: '+fmt(p[0]?.effective_at||p[0]?.updated_at),admin(m)?[row(button('Обновил протект','fury:protect:update',3))]:[]);
+  }
+  if (section==='raids') {
+    const raids=await db('raids',{query:squad+'&select=id,title,raid_date,raid_time&order=created_at.desc&limit=8'});
+    if(action?.startsWith('join-')) {
+      const id=action.slice(5);if(!/^\\d+$/.test(id))return ephem('Неверный рейд.');
+      const found=raids.find(x=>String(x.id)===id);
+      if(!found)return ephem('Рейд не найден в списке.');
+      const prior=await db('raid_participants',{query:'?raid_id=eq.'+id+'&member_id=eq.'+m.id+'&select=raid_id'});
+      if(!prior.length)await db('raid_participants',{method:'POST',body:{raid_id:Number(id),member_id:m.id}});
+      return ephem('Ты записан на рейд «'+found.title+'».');
+    }
+    return ephem('**Рейды**\\n'+(raids.map(x=>'#'+x.id+' · '+x.title+' · '+(x.raid_date||'')+' '+(x.raid_time||'').slice(0,5)).join('\\n')||'Рейдов пока нет.')+'\\nДля создания и редактирования рейдов используй сайт.',raids.slice(0,4).map(x=>row(button('Участвовать #'+x.id,'fury:raids:join-'+x.id,3))));
+  }
+  if (section==='tasks') {
+    if(action?.startsWith('claim-')) {
+      const id=action.slice(6);if(!/^\\d+$/.test(id))return ephem('Неверная задача.');
+      const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id'});
+      if(!task.length)return ephem('Задача не найдена.');
+      if(task[0].assignee_id && task[0].assignee_id!==m.id)return ephem('Задача уже назначена другому участнику.');
+      await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
+      return ephem('Задача взята в работу.');
+    }
+    const tasks=await db('tasks',{query:squad+'&select=id,title,status,assignee_id&order=created_at.desc&limit=8'});
+    return ephem('**Активные задачи**\\n'+(tasks.map(x=>'#'+x.id+' · '+x.title+' · '+(x.status||'В работе')).join('\\n')||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
+  }
+  if (section==='explosives') {
+    const items=await db('explosives_inventory',{query:squad+'&select=item,quantity&order=item.asc'});
+    return ephem('**ВЗРЫВ · запасы**\\n'+(items.map(x=>x.item+': '+x.quantity).join('\\n')||'Запасы пока не указаны.')+'\\nИзменение запасов — на сайте, чтобы избежать ошибок учёта.');
+  }
+  if (section==='alarm') {
+    if(action==='confirm') {
+      await db('squad_raid_alarms',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id}});
+      return ephem('**Тревога отправлена!** Отряд получит уведомление через действующую систему сайта.');
+    }
+    return ephem('**НАС РЕЙДЯТ**\\nПодтверди отправку тревоги всему отряду.',[row(button('Подтвердить тревогу','fury:alarm:confirm',4))]);
+  }
+  return ephem('Раздел не найден.');
 }
 // Register the test-guild slash command on startup, without exposing the bot token.
 async function registerGuildCommand() {
@@ -70,7 +164,7 @@ async function registerGuildCommand() {
     const result = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }]),
+      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
@@ -111,7 +205,7 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
-    const reply = response(interaction);
+    const reply = await handle(interaction);
     console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null, responseType: reply.type, responseData: interaction.type === InteractionType.PING ? JSON.stringify(reply) : undefined });
     return json(res, 200, reply);
   }
