@@ -218,7 +218,8 @@ async function handle(interaction) {
   }
   if (section==='alarm') {
     if(action==='confirm') {
-      await db('squad_raid_alarms',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id}});
+      const sent = await rpc('raise_discord_raid_alarm',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
+      if (sent !== true) return ephem('Тревога уже отправлялась за последние 5 минут. Повторная отправка заблокирована.');
       return ephem('**Тревога отправлена!** Отряд получит уведомление через действующую систему сайта.');
     }
     return ephem('**НАС РЕЙДЯТ**\nПодтверди отправку тревоги всему отряду.',[row(button('Подтвердить тревогу','fury:alarm:confirm',4))]);
