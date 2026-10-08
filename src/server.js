@@ -238,17 +238,6 @@ async function handle(interaction) {
     return !Number.isFinite(timestamp) || Date.now() <= timestamp;
   };
   if (section==='tasks') {
-    if(action?.startsWith('claim-')) {
-      const id=action.slice(6);if(!/^\d+$/.test(id))return ephem('Неверная задача.');
-      const task=await db('tasks',{query:squad+'&id=eq.'+id+'&select=id,assignee_id,status,deadline'});
-      if(!task.length)return ephem('Задача не найдена.');
-      if(!taskActive(task[0]))return ephem('Задача просрочена или выполнена. Обнови список.');
-      if(task[0].assignee_id===m.id)return ephem('Эта задача уже закреплена за тобой.');
-      if(task[0].assignee_id)return ephem('Задача уже назначена другому участнику.');
-      const updatedTasks = await db('tasks',{method:'PATCH',query:squad+'&id=eq.'+id+'&assignee_id=is.null',body:{assignee_id:m.id}});
-      if (!updatedTasks.length) return ephem('Задачу уже забрал другой участник. Обнови список.');
-      return ephem('Задача взята в работу.');
-    }
     const tasks=(await db('tasks',{query:squad+'&select=id,title,status,assignee_id,creator_id,quantity,unit,deadline&order=created_at.desc&limit=100'})).filter(taskActive).slice(0,8);
     const [members,contributions]=await Promise.all([
       db('members',{query:squad+'&select=id,nick'}),
@@ -267,9 +256,9 @@ async function handle(interaction) {
     const description=tasks.map(t=>{
       const need=Number(t.quantity||0),done=collected.get(t.id)||0;
       const deadline=String(t.deadline||'').trim().replace('T',' ').slice(0,16);
-      return '**#'+t.id+' · '+t.title+'**\\nСоздал: **'+(names.get(t.creator_id)||'Не указан')+'**\\nНужно: '+need+' '+unitLabel(need,t.unit)+' · Собрано: '+done+' '+unitLabel(done,t.unit)+'\\nДо: '+(deadline||'Не указан');
-    }).join('\\n\\n');
-    return ephem('**Активные задачи**\\n\\n'+(description||'Нет задач.'),tasks.filter(x=>!x.assignee_id).slice(0,4).map(x=>row(button('Взять задачу #'+x.id,'fury:tasks:claim-'+x.id,3))));
+      return '**#'+t.id+' · '+t.title+'**\nСоздал: **'+(names.get(t.creator_id)||'Не указан')+'**\nНужно: '+need+' '+unitLabel(need,t.unit)+' · Собрано: '+done+' '+unitLabel(done,t.unit)+'\nДо: '+(deadline||'Не указан');
+    }).join('\n\n');
+    return ephem('**Активные задачи**\n\n'+(description||'Нет задач.'),[row({type:2,style:5,label:'ПЕРЕЙТИ К ЗАДАЧАМ ↗',url:homepage.replace(/\/$/,'')+'/?section=tasks'})]);
   }
   if (section==='explosives') {
     const items=await db('explosives_inventory',{query:squad+'&select=item,quantity'});
