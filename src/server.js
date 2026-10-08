@@ -109,6 +109,18 @@ async function taskDMContent(event) {
   const author = authors[0]?.nick || 'Участник';
   return { title:'Новая задача', description:'**'+author+'** добавил новую задачу:\n**'+String(event.body || 'Без названия').slice(0,3500)+'**' };
 }
+async function locationOrRaidDMContent(event) {
+  const category = String(event.category || '').toLowerCase();
+  if (category !== 'raids' && category !== 'stash' && category !== 'base') return null;
+  if ((category === 'stash' || category === 'base') && !String(event.source_key || '').startsWith('squad-place:')) return null;
+  const authors = event.actor_id ? await db('members',{query:'?id=eq.'+event.actor_id+'&select=nick&limit=1'}) : [];
+  const author = authors[0]?.nick || 'Участник';
+  if (category === 'raids') return {title:'План на рейд',description:'**'+author+'** добавил новый план'};
+  const label = category === 'stash' ? 'схрон' : 'базу';
+  const title = category === 'stash' ? 'Новый схрон' : 'Новая база';
+  const name = String(event.body || '').trim();
+  return {title,description:'**'+author+'** добавил '+(category === 'stash' ? 'новый схрон' : 'новую базу')+(name && name !== 'Новая точка на карте' ? ':\n**'+name.slice(0,300)+'**' : '')};
+}
 async function sendDiscordDM(userId, event) {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw Error('Bot token missing');
@@ -121,10 +133,11 @@ async function sendDiscordDM(userId, event) {
   const category = String(event.category || 'general').toLowerCase();
   const protect = category === 'protect_updated' ? await protectDMContent(event) : null;
   const task = category === 'tasks' ? await taskDMContent(event) : null;
+  const extra = await locationOrRaidDMContent(event);
   const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
     method: 'POST', headers,
     body: JSON.stringify({
-      embeds: [{ title: String(protect?.title || task?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      embeds: [{ title: String(protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
       components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Открыть ДУБЛЬ', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
@@ -193,7 +206,7 @@ async function processDiscordNotifications() {
         if (!member || member.squad_id !== event.squad_id) { stats.ignoredSquad++; continue; }
         if (member.id === event.actor_id) { stats.ignoredActor++; continue; }
         const pref = prefById.get(member.id);
-        if (!pref || pref.enabled !== true || pref.categories?.[event.category] !== true) { stats.ignoredCategory++; continue; }
+        if (!pref || pref.enabled !== true || (pref.categories?.[event.category] !== true && !(event.category === 'base' && pref.categories?.stash === true))) { stats.ignoredCategory++; continue; }
         stats.candidates++;
         const claimed = await rpc('claim_discord_dm_delivery',{p_event_id:event.id,p_discord_user_id:link.discord_user_id});
         if (claimed !== true) { stats.unclaimed++; continue; }
