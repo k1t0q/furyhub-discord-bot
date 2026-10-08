@@ -182,7 +182,8 @@ async function handle(interaction) {
   if (section==='protect') {
     if(action==='update') {
       if(!admin(m)) return ephem('Обновление протекта доступно только администратору.');
-      await db('protect_updates',{method:'POST',body:{squad_id:m.squad_id,member_id:m.id}});
+      const updated = await rpc('discord_update_protect',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
+      if (updated !== true) return ephem('Протект уже обновляли за последние 30 секунд или недостаточно прав.');
       return ephem('Протект обновлён. Изменение сохранено на сайте.');
     }
     const p=await db('protect_updates',{query:squad+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
