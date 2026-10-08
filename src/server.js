@@ -35,7 +35,6 @@ const panel = (publicPost = false) => ({
         { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот через Ctrl+V', emoji: { name: '📦' } },
         { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот через Ctrl+V', emoji: { name: '🏠' } }
       ] }),
-      row(button('Добавить схрон', 'fury:add-stash', 2), button('Добавить базу', 'fury:add-base', 2)),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
@@ -293,6 +292,17 @@ async function handle(interaction) {
     const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
     const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот через **Ctrl + V** в одном сообщении. Затем нажми Enter.',true);
+    if (dm && interaction.channel_id && interaction.message?.id) {
+      try {
+        const reset = await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
+          method:'PATCH',
+          headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({components:panel(true).data.components}),
+          signal:AbortSignal.timeout(8000)
+        });
+        if(!reset.ok)console.error('[discord] Menu reset failed:',reset.status);
+      } catch(error){console.error('[discord] Menu reset failed:',error.message);}
+    }
     return ephem(dm ? 'Открой личные сообщения с ботом. Отправь название и скриншот одним сообщением.' : 'Не удалось отправить личное сообщение. Разреши ЛС от участников сервера и выбери пункт ещё раз.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
