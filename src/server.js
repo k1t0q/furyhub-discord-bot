@@ -24,7 +24,7 @@ const panel = (publicPost = false) => ({
         { name: 'РЕЙДЫ И РЕСУРСЫ', value: 'Планы рейдов, задачи и запасы взрывчатки.', inline: false },
         { name: 'ЭКСТРЕННАЯ ТРЕВОГА', value: 'Кнопка «НАС РЕЙДЯТ» для срочного оповещения.', inline: false }
       ],
-      footer: { text: process.env.DISCORD_TEST_MODE === 'false' ? 'SCUM HUB · синхронизация с ДУБЛЬ' : 'Тестовый режим · изменение данных отключено · SCUM HUB' }
+      ...(process.env.DISCORD_TEST_MODE === 'false' ? {} : { footer: { text: 'Тестовый режим · изменение данных отключено · SCUM HUB' } })
     }],
     components: [
       row(button('УЧАСТИЕ','fury:presence'),button('ПРОТЕКТ','fury:protect')),
