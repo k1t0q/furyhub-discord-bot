@@ -15,19 +15,22 @@ const panel = (publicPost = false) => ({
   data: {
     ...(publicPost ? {} : { flags: 64 }),
     embeds: [{
-      title: 'SCUM HUB  |  ДУБЛЬ',
-      description: '**Центр управления отрядом**\nУчастие, протект, рейды и задачи — в одном месте.',
+      author: { name: 'ДУБЛЬ  /  SQUAD CONTROL' },
+      title: 'SCUM HUB',
+      description: '**Панель управления отрядом**\nВыбери раздел ниже. Все данные синхронизируются с ДУБЛЬ.',
       color: 0xb32932,
       fields: [
-        { name: 'Управление', value: 'Выбери нужный раздел с помощью кнопок ниже.' },
-        { name: 'Статус', value: 'Интеграция в режиме проверки · изменение данных отключено.' }
+        { name: '01  ·  ОТРЯД', value: 'Участие в рейде, протект и ближайшие рейды.', inline: false },
+        { name: '02  ·  ОПЕРАЦИИ', value: 'Задачи и запасы взрывчатки.', inline: false },
+        { name: '03  ·  ТРЕВОГА', value: 'Экстренное оповещение отряда.', inline: false }
       ],
-      footer: { text: 'SCUM HUB • SQUAD CONTROL' }
+      footer: { text: 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
     components: [
-      { type: 1, components: [button('Моё участие', 'fury:presence', 3), button('Протект', 'fury:protect'), button('Рейды', 'fury:raids')] },
-      { type: 1, components: [button('Задачи', 'fury:tasks'), button('ВЗРЫВ', 'fury:explosives'), button('Нас рейдят', 'fury:alarm', 4)] },
-      { type: 1, components: [{ type: 2, style: 5, label: 'Открыть сайт', url: homepage }] }
+      row(button('УЧАСТИЕ', 'fury:presence', 2), button('ПРОТЕКТ', 'fury:protect', 2), button('РЕЙДЫ', 'fury:raids', 2)),
+      row(button('ЗАДАЧИ', 'fury:tasks', 2), button('ВЗРЫВ', 'fury:explosives', 2)),
+      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4)),
+      row({ type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
 });
