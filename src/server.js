@@ -28,10 +28,11 @@ const panel = () => ({
   }
 });
 function response(interaction) {
+  // Discord's endpoint validation PING has no guild_id; acknowledge it before guild restrictions.
+  if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if (allowedGuild && interaction.guild_id !== allowedGuild) {
     return { type: 4, data: { flags: 64, content: 'Бот пока доступен только на тестовом сервере.' } };
   }
-  if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if (interaction.type === InteractionType.APPLICATION_COMMAND && interaction.data?.name === 'fury') return panel();
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id || '').startsWith('fury:')) {
     const labels = { presence: 'Моё участие', protect: 'Протект', raids: 'Рейды', tasks: 'Задачи', explosives: 'ВЗРЫВ', alarm: 'Нас рейдят' };
