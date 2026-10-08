@@ -21,13 +21,8 @@ const panel = (publicPost = false) => ({
       image: { url: 'https://furyhub-discord-bot-main.layero.app/banner.png' },
       author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
-      description: '**Управление отрядом в Discord**\nАктуальные данные из ДУБЛЬ. Выбери нужный раздел ниже.',
+      description: 'Управление отрядом, рейдами и ресурсами в одном месте.',
       color: 0xb32932,
-      fields: [
-        { name: 'СОСТАВ И ПРОТЕКТ', value: 'Отметки участников и время защиты базы.', inline: false },
-        { name: 'РЕЙДЫ И РЕСУРСЫ', value: 'Планы рейдов, задачи и запасы взрывчатки.', inline: false },
-        { name: 'ЭКСТРЕННАЯ ТРЕВОГА', value: 'Кнопка «НАС РЕЙДЯТ» для срочного оповещения.', inline: false }
-      ],
       ...(process.env.DISCORD_TEST_MODE === 'false' ? {} : { footer: { text: 'Тестовый режим · изменение данных отключено · SCUM HUB' } })
     }],
     components: [
