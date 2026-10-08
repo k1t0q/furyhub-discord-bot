@@ -14,7 +14,7 @@ const panel = (publicPost = false) => ({
   type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
   data: {
     ...(publicPost ? {} : { flags: 64 }),
-    embeds: [{
+    embeds: [{ image: { url: 'https://raw.githubusercontent.com/k1t0q/furyhub-discord-bot/main/%D0%90%D0%BB%D1%8B%D0%B9%20%D0%B7%D0%B0%D0%BA%D0%B0%D1%82%20%D0%BD%D0%B0%D0%B4%20%D1%83%D0%BA%D1%80%D0%B5%D0%BF%D0%BB%D1%91%D0%BD%D0%BD%D0%BE%D0%B9%20%D0%B4%D0%BE%D0%BB%D0%B8%D0%BD%D0%BE%D0%B9.png' }, color: 0xb32932 }, {
       author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
       description: '**Управление отрядом в Discord**\nАктуальные данные из ДУБЛЬ. Выбери нужный раздел ниже.',
