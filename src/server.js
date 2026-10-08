@@ -43,7 +43,7 @@ function response(interaction) {
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true, service: 'furyhub-discord-bot' });
   if (req.method !== 'POST' || req.url !== '/interactions') return json(res, 404, { error: 'Not found' });
-  if (!publicKey) return json(res, 503, { error: 'Missing Discord public key' });
+  if (!publicKey) { console.error('[discord] DISCORD_PUBLIC_KEY missing'); return json(res, 503, { error: 'Missing Discord public key' }); }
   const chunks = [];
   let length = 0;
   for await (const chunk of req) {
@@ -55,8 +55,9 @@ http.createServer(async (req, res) => {
   const signature = req.headers['x-signature-ed25519'];
   const timestamp = req.headers['x-signature-timestamp'];
   if (typeof signature !== 'string' || typeof timestamp !== 'string' || !verifyKey(body, signature, timestamp, publicKey)) {
+    console.warn('[discord] rejected signature', { signaturePresent: typeof signature === 'string', timestampPresent: typeof timestamp === 'string', keyLength: publicKey.length });
     return json(res, 401, { error: 'Invalid signature' });
   }
-  try { return json(res, 200, response(JSON.parse(body.toString('utf8')))); }
+  try { const interaction = JSON.parse(body.toString('utf8')); console.log('[discord] verified interaction', { type: interaction.type, guild: interaction.guild_id || null }); return json(res, 200, response(interaction)); }
   catch (error) { console.error('Interaction error', error); return json(res, 500, { error: 'Internal error' }); }
 }).listen(port, '0.0.0.0', () => console.log('FURY HUB Discord interactions listening on port', port));
