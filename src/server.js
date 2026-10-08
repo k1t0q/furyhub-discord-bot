@@ -127,12 +127,12 @@ async function handle(interaction) {
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') {
     const perms = BigInt(interaction.member?.permissions || '0');
     if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Диагностика доступна только администраторам сервера.');
-    if (!apiReady()) return ephem('**SCUM HUB · диагностика**\\nSupabase: переменные отсутствуют.');
+    if (!apiReady()) return ephem('**SCUM HUB · диагностика**\nSupabase: переменные отсутствуют.');
     try {
-      const check = await db('members', { query: '?select=id&limit=1' });
-      return ephem('**SCUM HUB · диагностика**\\nDiscord: подключён\\nSupabase: подключён (запрос выполнен)\\nИзменение данных: отключено\\nЛичные уведомления: отключены');
+      await db('members', { query: '?select=id&limit=1' });
+      return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: подключён (запрос выполнен)\nИзменение данных: отключено\nЛичные уведомления: отключены');
     } catch (error) {
-      return ephem('**SCUM HUB · диагностика**\\nSupabase: ошибка соединения (' + String(error.message).slice(0,100) + ')');
+      return ephem('**SCUM HUB · диагностика**\nSupabase: ошибка соединения (' + String(error.message).slice(0,100) + ')');
     }
   }
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
