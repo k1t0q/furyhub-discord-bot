@@ -24,7 +24,7 @@ const panel = (publicPost = false) => ({
         { name: '02  ·  ОПЕРАЦИИ', value: 'Рейды, задачи и запасы взрывчатки.', inline: false },
         { name: '03  ·  ТРЕВОГА', value: 'Экстренное оповещение отряда.', inline: false }
       ],
-      footer: { text: 'Тестовый режим · изменение данных отключено · SCUM HUB' }
+      footer: { text: process.env.DISCORD_TEST_MODE === 'false' ? 'SCUM HUB · синхронизация с ДУБЛЬ' : 'Тестовый режим · изменение данных отключено · SCUM HUB' }
     }],
     components: [
       row(button('УЧАСТИЕ', 'fury:presence', 2), button('ПРОТЕКТ', 'fury:protect', 2)),
