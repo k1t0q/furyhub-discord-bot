@@ -32,8 +32,8 @@ const panel = (publicPost = false) => ({
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } },
-        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот через Ctrl+V', emoji: { name: '📦' } },
-        { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот через Ctrl+V', emoji: { name: '🏠' } }
+        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот', emoji: { name: '📦' } },
+        { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот', emoji: { name: '🏠' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
