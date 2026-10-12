@@ -35,11 +35,26 @@ const panel = (publicPost = false) => ({
         { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот', emoji: { name: '📦' } },
         { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот', emoji: { name: '🏠' } }
       ] }),
-      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'КУПИТЬ СПАЛКУ ↗', url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826' }, { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
+      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
 });
 
+const shopPanel = () => ({
+  type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+  data: {
+    embeds: [{
+      title: 'SCUM HUB · МАГАЗИН',
+      description: 'Быстрый доступ к покупкам на сервере SCUM.\n\nВыберите нужный раздел:',
+      color: 0xb32932,
+      footer: { text: 'SCUM HUB | ДУБЛЬ' }
+    }],
+    components: [row({
+      type: 2, style: 5, label: 'КУПИТЬ СПАЛКУ ↗',
+      url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826'
+    })]
+  }
+});
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const apiReady = () => Boolean(supabaseUrl && serviceKey);
@@ -257,6 +272,11 @@ async function handle(interaction) {
   if (allowedGuild && interaction.guild_id !== allowedGuild && !(isPlaceCancel && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
+  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'shop') {
+    const perms = BigInt(interaction.member?.permissions || '0');
+    if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Опубликовать панель магазина может только администратор.');
+    return shopPanel();
+  }
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') {
     const perms = BigInt(interaction.member?.permissions || '0');
     if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Диагностика доступна только администраторам сервера.');
@@ -446,7 +466,7 @@ async function registerGuildCommand() {
     const result = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }, { name: 'status', description: 'Проверить состояние интеграции SCUM HUB', type: 1 }]),
+      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'shop', description: 'Опубликовать панель магазина SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }, { name: 'status', description: 'Проверить состояние интеграции SCUM HUB', type: 1 }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
