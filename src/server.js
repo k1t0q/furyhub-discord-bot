@@ -309,7 +309,19 @@ async function handle(interaction) {
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
     const p = BigInt(interaction.member?.permissions || '0');
     if ((p & 0x8n) === 0n && (p & 0x20n) === 0n) return ephem('Недостаточно прав.');
-    return panel(true);
+    if (!interaction.channel_id || !process.env.DISCORD_BOT_TOKEN) return ephem('Не удалось определить канал или токен бота.');
+    const mainPanel = panel(true).data;
+    const response = await fetch('https://discord.com/api/v10/channels/' + encodeURIComponent(interaction.channel_id) + '/messages', {
+      method: 'POST',
+      headers: { Authorization: 'Bot ' + process.env.DISCORD_BOT_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: mainPanel.embeds, components: mainPanel.components }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) {
+      console.error('[discord] Setup publish failed:', response.status);
+      return ephem('Не удалось опубликовать панель. Проверь права бота на отправку сообщений в этом канале.');
+    }
+    return ephem('Панель SCUM HUB опубликована отдельным сообщением от имени бота. Закрепи её в канале.');
   }
   if (!apiReady()) return ephem('Интеграция с сайтом ещё не настроена. Администратор должен добавить SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY в Layero.');
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'link') {
@@ -537,7 +549,7 @@ http.createServer(async (req, res) => {
     const interaction = JSON.parse(body.toString('utf8'));
     const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
       (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
-      (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop'].includes(interaction.data?.name));
+      (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop', 'setup'].includes(interaction.data?.name));
     if (!isDeferred) {
       const reply = await handle(interaction);
       if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:menu') void resetPanelSelection(interaction);
