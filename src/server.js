@@ -45,14 +45,20 @@ const shopPanel = () => ({
   data: {
     embeds: [{
       title: 'SCUM HUB · МАГАЗИН',
-      description: 'Быстрый доступ к покупкам на сервере SCUM.\n\nВыберите нужный раздел:',
+      description: 'Быстрый доступ к покупкам и услугам сервера SCUM.\n\n**Выбери нужный раздел ниже:**',
       color: 0xb32932,
       footer: { text: 'SCUM HUB | ДУБЛЬ' }
     }],
-    components: [row({
-      type: 2, style: 5, label: 'КУПИТЬ СПАЛКУ ↗',
-      url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826'
-    })]
+    components: [
+      row(
+        { type: 2, style: 5, label: 'СПАЛКА', emoji: { name: '🛏️' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826' },
+        { type: 2, style: 5, label: 'МОТ / АРЕНДА', emoji: { name: '🏍️' }, url: 'https://discord.com/channels/691786588450979950/1491692548178051186/1504736726285811753' }
+      ),
+      row(
+        { type: 2, style: 5, label: 'БЕНЗИН', emoji: { name: '⛽' }, url: 'https://discord.com/channels/691786588450979950/1491686083425992786/1504736515471708172' },
+        { type: 2, style: 5, label: 'СУНДУК', emoji: { name: '📦' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539029231665223' }
+      )
+    ]
   }
 });
 const supabaseUrl = process.env.SUPABASE_URL;
