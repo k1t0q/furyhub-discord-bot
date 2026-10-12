@@ -35,7 +35,7 @@ const panel = (publicPost = false) => ({
         { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот', emoji: { name: '📦' } },
         { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот', emoji: { name: '🏠' } }
       ] }),
-      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
+      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'КУПИТЬ СПАЛКУ ↗', url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826' }, { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
   }
 });
