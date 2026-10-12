@@ -45,7 +45,7 @@ const shopPanel = () => ({
   data: {
     embeds: [{
       title: 'SCUM HUB · МАГАЗИН',
-      description: 'Быстрый доступ к покупкам и услугам сервера SCUM.\n\n**Выбери нужный раздел ниже:**',
+      description: 'Быстрый доступ к покупкам и услугам сервера FURY.\n\n**Выбери нужный раздел ниже:**',
       color: 0xb32932,
       footer: { text: 'SCUM HUB | ДУБЛЬ' }
     }],
