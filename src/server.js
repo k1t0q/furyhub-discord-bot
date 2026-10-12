@@ -52,13 +52,12 @@ const shopPanel = () => ({
     components: [
       row(
         { type: 2, style: 5, label: 'СПАЛКА', emoji: { name: '🛏️' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826' },
-        { type: 2, style: 5, label: 'МОТ / АРЕНДА', emoji: { name: '🏍️' }, url: 'https://discord.com/channels/691786588450979950/1491692548178051186/1504736726285811753' }
-      ),
-      row(
+        { type: 2, style: 5, label: 'МОТ / АРЕНДА', emoji: { name: '🏍️' }, url: 'https://discord.com/channels/691786588450979950/1491692548178051186/1504736726285811753' },
         { type: 2, style: 5, label: 'БЕНЗИН', emoji: { name: '⛽' }, url: 'https://discord.com/channels/691786588450979950/1491686083425992786/1504736515471708172' },
         { type: 2, style: 5, label: 'СУНДУК', emoji: { name: '📦' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539029231665223' }
       ),
       row(
+        { type: 2, style: 5, label: 'ЗАМОК', emoji: { name: '🔒' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539016191451206' },
         { type: 2, style: 5, label: 'БЫЧАРА', emoji: { name: '🚗' }, url: 'https://discord.com/channels/691786588450979950/1486711082398646312/1486711829278232607' },
         { type: 2, style: 5, label: 'САМОЛЁТ', emoji: { name: '✈️' }, url: 'https://discord.com/channels/691786588450979950/1486741830530891947/1486742351907913939' }
       )
