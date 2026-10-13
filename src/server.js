@@ -696,9 +696,41 @@ async function receivePlaceScreenshot(message) {
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
   await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nСхрон опубликован в SCUM HUB.');
 }
+// Discord bot activity mirrors the current SCUM HUB protection timer.
+let lastProtectActivity = '';
+async function protectActivityText() {
+  const links = await db('discord_member_links',{query:'?select=member_id&limit=1'});
+  if (!links.length) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
+  const member = await db('members',{query:'?id=eq.'+links[0].member_id+'&select=squad_id&limit=1'});
+  if (!member[0]?.squad_id) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
+  const entries = await db('protect_updates',{query:'?squad_id=eq.'+member[0].squad_id+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
+  const last = entries[0];
+  if (!last) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
+  const base = Date.parse(last.effective_at || last.updated_at);
+  if (!Number.isFinite(base)) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
+  const start = base + 60*60000;
+  const end = base + 540*60000;
+  const clock = t => new Date(t).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+  const now = Date.now();
+  if (now >= end) return 'ПРОТЕКТ СПАЛ В '+clock(end);
+  if (now < start) return 'ЗАПУСКАЕТСЯ · СПАДЁТ '+clock(end);
+  return 'АКТИВЕН · СПАДЁТ '+clock(end);
+}
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
-  let socket,heartbeat,sequence=null,backoff=3000;
+  let socket,heartbeat,sequence=null,backoff=3000,activityTimer=null,activityBusy=false;
+  const publishActivity = async () => {
+    if (activityBusy || socket?.readyState !== WebSocket.OPEN || !apiReady()) return;
+    activityBusy = true;
+    try {
+      const label = await protectActivityText();
+      if (label !== lastProtectActivity && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({op:3,d:{since:null,activities:[{name:label,type:0}],status:'online',afk:false}}));
+        lastProtectActivity = label;
+      }
+    } catch (err) { console.error('[discord] Protect activity:',err.message); }
+    finally { activityBusy = false; }
+  };
   const connect=()=>{
     socket=new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
     socket.on('message',raw=>{
@@ -710,6 +742,13 @@ function startDiscordGateway() {
         socket.send(JSON.stringify({op:2,d:{token:process.env.DISCORD_BOT_TOKEN,intents:4096,properties:{os:'linux',browser:'scum-hub',device:'scum-hub'}}}));
         backoff=3000;
       }
+      if(packet.t==='READY') {
+        lastProtectActivity = '';
+        clearInterval(activityTimer);
+        void publishActivity();
+        activityTimer = setInterval(() => void publishActivity(),60000);
+        activityTimer.unref();
+      }
       if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
       if(packet.op===7 || packet.op===9)socket.close();
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
@@ -718,7 +757,7 @@ function startDiscordGateway() {
       });
     });
     socket.on('error',err=>console.error('[discord] Gateway:',err.message));
-    socket.on('close',()=>{clearInterval(heartbeat);setTimeout(connect,backoff).unref();backoff=Math.min(backoff*2,60000);});
+    socket.on('close',()=>{clearInterval(heartbeat);clearInterval(activityTimer);lastProtectActivity='';setTimeout(connect,backoff).unref();backoff=Math.min(backoff*2,60000);});
   };
   connect();
 }
