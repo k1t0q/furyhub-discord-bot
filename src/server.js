@@ -32,8 +32,7 @@ const panel = (publicPost = false) => ({
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } },
-        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Название и скриншот', emoji: { name: '📦' } },
-        { label: 'Добавить базу', value: 'fury:add-base', description: 'Название и скриншот', emoji: { name: '🏠' } }
+        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Текст → координаты → фото', emoji: { name: '📦' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
     ]
@@ -349,16 +348,14 @@ async function handle(interaction) {
     await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
     return {type:7,data:{content:'Добавление отменено.',components:[]}};
   }
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && (['fury:add-stash','fury:add-base'].includes(interaction.data?.custom_id) || (interaction.data?.custom_id === 'fury:menu' && ['fury:add-stash','fury:add-base'].includes(interaction.data?.values?.[0])))) {
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && (interaction.data?.custom_id==='fury:add-stash' || (interaction.data?.custom_id==='fury:menu' && interaction.data?.values?.[0]==='fury:add-stash'))) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
-    const member = await linked(interaction);
-    if (!member) return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    const uid = String(interaction.member?.user?.id || interaction.user?.id || '');
-    const selected = interaction.data.custom_id === 'fury:menu' ? interaction.data.values?.[0] : interaction.data.custom_id;
-    const kind = selected === 'fury:add-stash' ? 'stash' : 'base';
-    await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
-    const dm = await discordSendTextDM(uid,'**Добавить '+(kind==='stash'?'схрон':'базу')+'**\n\nНапиши название и прикрепи скриншот в одном сообщении. Затем нажми Enter.',true);
-    return ephem(dm ? 'Открой личные сообщения с ботом. Отправь название и скриншот одним сообщением.' : 'Не удалось отправить личное сообщение. Разреши ЛС от участников сервера и выбери пункт ещё раз.');
+    const member=await linked(interaction);
+    if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
+    await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind:'stash',title:'',created_at:new Date().toISOString()}});
+    const dm=await discordSendTextDM(uid,'**Схрон — шаг 1/3**\\nОтправь название или текст схрона. Для отмены напиши «отмена».',true);
+    return ephem(dm?'Открой ЛС бота. Шаг 1/3: текст схрона.':'Не удалось отправить ЛС бота.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
@@ -633,12 +630,34 @@ async function receivePlaceScreenshot(message) {
     await discordSendTextDM(uid,'Добавление отменено.');
     return;
   }
-  const title=String(message.content||'').trim();
-  const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
-  if(!title || title.length>150 || !attachment){
-    await discordSendTextDM(uid,'Отправь **название и скриншот в одном сообщении** (до 150 символов). Скриншот вставь через Ctrl + V.');
+  const content=String(message.content||'').trim();
+  const draftState=String(draft.title||'');
+  if(draft.kind!=='stash'){
+    await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
+    await discordSendTextDM(uid,'Добавление базы отключено. Начни создание схрона заново.');
     return;
   }
+  if(!draftState.startsWith('STASH_COORDS:')&&!draftState.startsWith('STASH_PHOTO:')){
+    if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 1/3: отправь текст от 1 до 150 символов.');return;}
+    await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_COORDS:'+content}});
+    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0');
+    return;
+  }
+  if(draftState.startsWith('STASH_COORDS:')){
+    const normalized=content.replace(/,/g,'.');
+    const mx=normalized.match(/\bX\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),my=normalized.match(/\bY\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),mz=normalized.match(/\bZ\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i);
+    if(!mx||!my){await discordSendTextDM(uid,'Шаг 2/3: координаты должны содержать X и Y.');return;}
+    const X=Number(mx[1]),Y=Number(my[1]),Z=mz?Number(mz[1]):0;
+    const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
+    if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||nx>1||ny<0||ny>1){await discordSendTextDM(uid,'Координаты вне карты SCUM. Проверь X и Y.');return;}
+    await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:'X='+X+' Y='+Y+' Z='+Z})}});
+    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.');
+    return;
+  }
+  let stashInfo;
+  try{stashInfo=JSON.parse(draftState.slice(12));}catch{await discordSendTextDM(uid,'Ошибка черновика. Начни заново.');return;}
+  const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
+  if(!attachment){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию схрона.');return;}
   if(attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
   const link=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&member_id=eq.'+draft.member_id+'&select=member_id&limit=1'});
   if(!link.length){await discordSendTextDM(uid,'Привязка аккаунта изменилась. Добавление отменено.');return;}
@@ -654,9 +673,9 @@ async function receivePlaceScreenshot(message) {
   });
   if(!storage.ok)throw Error('Screenshot storage '+storage.status+': '+(await storage.text()).slice(0,150));
   const imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
-  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:draft.kind,images:[imageUrl],comment:title,created_by:draft.member_id}});
+  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:'stash',images:[imageUrl],comment:stashInfo.name+'\nКоординаты: '+stashInfo.coords,created_by:draft.member_id}});
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
-  await discordSendTextDM(uid,'**'+(draft.kind==='stash'?'Схрон':'База')+' добавлен'+(draft.kind==='stash'?'':'а')+'!**\nНазвание: **'+title+'**\nСкриншот сохранён на сайте ДУБЛЬ.');
+  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+stashInfo.coords+'\nФото сохранено. Схрон появится на карте SCUM HUB.');
 }
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
