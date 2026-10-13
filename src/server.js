@@ -18,7 +18,7 @@ const panel = (publicPost = false) => ({
   data: {
     ...(publicPost ? {} : { flags: 64 }),
     embeds: [{
-      image: { url: 'https://furyhub-discord-bot-main.layero.app/banner.png' },
+      image: { url: (process.env.DISCORD_BANNER_URL || homepage.replace(/\/$/,'') + '/banner.png') },
       author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
       description: '**Центр управления отрядом**\nСледи за составом, планируй рейды, управляй протектом и ресурсами базы.\n\n**ВОЗМОЖНОСТИ ШТАБА**\n**Отряд** — участие, состав и время захода.\n**База** — протект, схроны и укрепления.\n**Рейды** — планы, задачи и взрывчатка.\n\n*Выбери нужный раздел ниже, чтобы продолжить.*',
