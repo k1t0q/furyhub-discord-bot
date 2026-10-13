@@ -362,7 +362,7 @@ async function handle(interaction) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member=await linked(interaction);
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\\nВыбери тип метки:',flags:64,components:[{type:1,components:[{type:3,custom_id:'fury:marker-kind',placeholder:'Тип метки',options:[{label:'Схрон',value:'stash',description:'Срок хранения 14 дней',emoji:{name:'📦'}},{label:'База',value:'base',description:'Постоянная метка',emoji:{name:'🏠'}},{label:'Прочее',value:'other',description:'Постоянная метка',emoji:{name:'📍'}}]}]}]}};
+    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\nВыбери тип метки:',flags:64,components:[{type:1,components:[{type:3,custom_id:'fury:marker-kind',placeholder:'Тип метки',options:[{label:'Схрон',value:'stash',description:'Срок хранения 14 дней',emoji:{name:'📦'}},{label:'База',value:'base',description:'Постоянная метка',emoji:{name:'🏠'}},{label:'Прочее',value:'other',description:'Постоянная метка',emoji:{name:'📍'}}]}]}]}};
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:marker-kind') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
@@ -373,7 +373,7 @@ async function handle(interaction) {
     const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
     const label={stash:'Схрон',base:'База',other:'Прочее'}[kind];
-    const dm=await discordSendTextDM(uid,'**'+label+' — шаг 2/4**\\nОтправь название или текст метки. Для отмены напиши «отмена».',true);
+    const dm=await discordSendTextDM(uid,'**'+label+' — шаг 2/4**\nОтправь название или текст метки. Для отмены напиши «отмена».',true);
     return ephem(dm?'Открой ЛС бота. Шаг 2/4: текст метки.':'Не удалось отправить ЛС бота.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
