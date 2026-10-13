@@ -354,7 +354,7 @@ async function handle(interaction) {
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
     const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind:'stash',title:'',created_at:new Date().toISOString()}});
-    const dm=await discordSendTextDM(uid,'**Схрон — шаг 1/3**\\nОтправь название или текст схрона. Для отмены напиши «отмена».',true);
+    const dm=await discordSendTextDM(uid,'**Схрон — шаг 1/3**\nОтправь название или текст схрона. Для отмены напиши «отмена».',true);
     return ephem(dm?'Открой ЛС бота. Шаг 1/3: текст схрона.':'Не удалось отправить ЛС бота.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
