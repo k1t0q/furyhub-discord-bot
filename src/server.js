@@ -640,10 +640,15 @@ async function receivePlaceScreenshot(message) {
   if(!draftState.startsWith('STASH_COORDS:')&&!draftState.startsWith('STASH_PHOTO:')){
     if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 1/3: отправь текст от 1 до 150 символов.');return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_COORDS:'+content}});
-    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0');
+    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли напиши **пропустить**.');
     return;
   }
   if(draftState.startsWith('STASH_COORDS:')){
+    if(content.toLocaleLowerCase('ru')==='пропустить'){
+      await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:''})}});
+      await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nПрикрепи фото или напиши **пропустить**.');
+      return;
+    }
     const normalized=content.replace(/,/g,'.');
     const mx=normalized.match(/\bX\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),my=normalized.match(/\bY\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),mz=normalized.match(/\bZ\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i);
     if(!mx||!my){await discordSendTextDM(uid,'Шаг 2/3: координаты должны содержать X и Y.');return;}
@@ -651,16 +656,19 @@ async function receivePlaceScreenshot(message) {
     const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
     if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||nx>1||ny<0||ny>1){await discordSendTextDM(uid,'Координаты вне карты SCUM. Проверь X и Y.');return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:'X='+X+' Y='+Y+' Z='+Z})}});
-    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.');
+    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.\nИли напиши **пропустить**.');
     return;
   }
   let stashInfo;
   try{stashInfo=JSON.parse(draftState.slice(12));}catch{await discordSendTextDM(uid,'Ошибка черновика. Начни заново.');return;}
+  const skipPhoto=content.toLocaleLowerCase('ru')==='пропустить';
   const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
-  if(!attachment){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию схрона.');return;}
-  if(attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
+  if(!attachment&&!skipPhoto){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию или напиши «пропустить».');return;}
+  if(attachment&&attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
   const link=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&member_id=eq.'+draft.member_id+'&select=member_id&limit=1'});
   if(!link.length){await discordSendTextDM(uid,'Привязка аккаунта изменилась. Добавление отменено.');return;}
+  let imageUrl=null;
+  if(attachment){
   const download=await fetch(attachment.url,{signal:AbortSignal.timeout(15000)});
   if(!download.ok)throw Error('Screenshot download '+download.status);
   const bytes=Buffer.from(await download.arrayBuffer());
@@ -672,10 +680,11 @@ async function receivePlaceScreenshot(message) {
     method:'POST',headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':mime,'x-upsert':'false'},body:bytes,signal:AbortSignal.timeout(20000)
   });
   if(!storage.ok)throw Error('Screenshot storage '+storage.status+': '+(await storage.text()).slice(0,150));
-  const imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
-  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:'stash',images:[imageUrl],comment:stashInfo.name+'\nКоординаты: '+stashInfo.coords,created_by:draft.member_id}});
+  imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
+  }
+  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:'stash',images:imageUrl?[imageUrl]:[],comment:stashInfo.name+(stashInfo.coords?'\nКоординаты: '+stashInfo.coords:''),created_by:draft.member_id}});
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
-  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+stashInfo.coords+'\nФото сохранено. Схрон появится на карте SCUM HUB.');
+  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nСхрон опубликован в SCUM HUB.'');
 }
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
