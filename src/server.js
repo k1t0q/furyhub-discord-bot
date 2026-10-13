@@ -716,6 +716,38 @@ async function protectActivityText() {
   if (now < start) return 'ЗАПУСКАЕТСЯ · СПАДЁТ В '+clock(end);
   return 'АКТИВЕН · СПАДЁТ В '+clock(end);
 }
+// Informational voice-channel title synchronized with the same protection data as bot activity.
+const protectVoiceChannelId = process.env.DISCORD_PROTECT_CHANNEL_ID || '1559467772013191189';
+let lastProtectChannelName = '';
+let lastProtectChannelCheck = 0;
+let protectChannelSyncBusy = false;
+async function syncProtectVoiceChannel(label){
+  if(protectChannelSyncBusy || !/^\\d{15,22}$/.test(protectVoiceChannelId) || !process.env.DISCORD_BOT_TOKEN) return;
+  // Avoid repeated channel requests; title updates occur only on meaningful changes.
+  if(lastProtectChannelName===label && Date.now()-lastProtectChannelCheck<15*60000) return;
+  protectChannelSyncBusy=true;
+  try {
+    const headers={Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN};
+    const url='https://discord.com/api/v10/channels/'+protectVoiceChannelId;
+    const infoResponse=await fetch(url,{headers,signal:AbortSignal.timeout(8000)});
+    if(!infoResponse.ok)throw Error('Channel lookup failed ('+infoResponse.status+')');
+    const channel=await infoResponse.json();
+    if(channel.type!==2)throw Error('Protection channel must be a voice channel');
+    if(allowedGuild && channel.guild_id!==allowedGuild)throw Error('Protection channel is outside allowed Discord server');
+    const desired=('🛡️ '+label).slice(0,100);
+    if(channel.name!==desired){
+      const response=await fetch(url,{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({name:desired}),signal:AbortSignal.timeout(8000)});
+      if(!response.ok){
+        const retryAfter=response.headers.get('retry-after');
+        throw Error('Channel rename failed ('+response.status+')'+(retryAfter?', retry-after '+retryAfter+'s':''));
+      }
+      console.log('[discord] Protect voice channel updated:',desired);
+    }
+    lastProtectChannelName=label;
+    lastProtectChannelCheck=Date.now();
+  }catch(err){console.error('[discord] Protect voice channel:',err.message)}
+  finally{protectChannelSyncBusy=false}
+}
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
   let socket,heartbeat,sequence=null,backoff=3000,activityTimer=null,activityBusy=false;
@@ -724,6 +756,7 @@ function startDiscordGateway() {
     activityBusy = true;
     try {
       const label = await protectActivityText();
+      await syncProtectVoiceChannel(label);
       if (label !== lastProtectActivity && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({op:3,d:{since:null,activities:[{name:label,type:0}],status:'online',afk:false}}));
         lastProtectActivity = label;
