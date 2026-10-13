@@ -34,7 +34,7 @@ const panel = (publicPost = false) => ({
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } },
         { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Текст → координаты → фото', emoji: { name: '📦' } }
       ] }),
-      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'ОТКРЫТЬ ДУБЛЬ ↗', url: homepage })
+      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
   }
 });
