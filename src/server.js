@@ -279,7 +279,8 @@ async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
   const isStashSkip = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stash-skip';
-  if (allowedGuild && interaction.guild_id !== allowedGuild && !((isPlaceCancel || isStashSkip) && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
+  const isMarkerKind = interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id||'').startsWith('fury:marker-kind:');
+  if (allowedGuild && interaction.guild_id !== allowedGuild && !((isPlaceCancel || isStashSkip || isMarkerKind) && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'shop') {
@@ -362,7 +363,9 @@ async function handle(interaction) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member=await linked(interaction);
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\nВыбери тип метки:',flags:64,components:[row(button('СХРОН','fury:marker-kind:stash',2),button('БАЗА','fury:marker-kind:base',2),button('ПРОЧЕЕ','fury:marker-kind:other',2),button('ОТМЕНА','fury:marker-kind:cancel',4))]}};
+    const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
+    const sent=await discordSendTextDM(uid,'**Добавить метку — шаг 1/4**\nВыбери тип метки:',false,false,[row(button('СХРОН','fury:marker-kind:stash',2),button('БАЗА','fury:marker-kind:base',2),button('ПРОЧЕЕ','fury:marker-kind:other',2),button('ОТМЕНА','fury:marker-kind:cancel',4))]);
+    return ephem(sent?'Отправил выбор типа метки в личные сообщения.':'Не удалось отправить сообщение. Разреши личные сообщения от участников сервера.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id||'').startsWith('fury:marker-kind:')) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
@@ -375,7 +378,7 @@ async function handle(interaction) {
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
     const label={stash:'Схрон',base:'База',other:'Прочее'}[kind];
     const dm=await discordSendTextDM(uid,'**'+label+' — шаг 2/4**\nОтправь название или текст метки. Для отмены напиши «отмена».',true);
-    return ephem(dm?'Открой ЛС бота. Шаг 2/4: текст метки.':'Не удалось отправить ЛС бота.');
+    return {type:7,data:{content:dm?'Тип выбран: **'+label+'**. Продолжай в следующем сообщении.':'Не удалось отправить следующий шаг в ЛС.',components:[]}};
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
@@ -587,7 +590,7 @@ http.createServer(async (req, res) => {
         reply = await handle(interaction);
       } catch (error) {
         console.error('[discord] deferred interaction failed:', error?.message || 'Unknown error');
-        reply = ephem('Не удалось выполнить действие. Проверь логи бота в Layero.');
+        reply = ephem('Не удалось выполнить действие. Проверь логи бота на Timeweb.');
       }
       await resetPanelSelection(interaction);
       const data = reply?.data || { content: 'Не удалось получить ответ.' };
@@ -620,7 +623,7 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 }
 
 // Gateway is required to receive screenshots pasted into direct messages.
-async function discordSendTextDM(userId,content,withCancel=false,withSkip=false) {
+async function discordSendTextDM(userId,content,withCancel=false,withSkip=false,customComponents=null) {
   const token=process.env.DISCORD_BOT_TOKEN;
   if(!token)return false;
   try {
@@ -628,7 +631,7 @@ async function discordSendTextDM(userId,content,withCancel=false,withSkip=false)
     const channel=await fetch('https://discord.com/api/v10/users/@me/channels',{method:'POST',headers,body:JSON.stringify({recipient_id:userId}),signal:AbortSignal.timeout(10000)});
     if(!channel.ok)throw Error('DM channel '+channel.status);
     const {id}=await channel.json();
-    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content,...((withCancel || withSkip)?{components:[{type:1,components:[...(withSkip?[{type:2,style:2,label:'Пропустить',custom_id:'fury:stash-skip'}]:[]),...(withCancel?[{type:2,style:4,label:'Отмена',custom_id:'fury:place-cancel'}]:[])]}]}:{})}),signal:AbortSignal.timeout(10000)});
+    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content,...(customComponents?{components:customComponents}:((withCancel || withSkip)?{components:[{type:1,components:[...(withSkip?[{type:2,style:2,label:'Пропустить',custom_id:'fury:stash-skip'}]:[]),...(withCancel?[{type:2,style:4,label:'Отмена',custom_id:'fury:place-cancel'}]:[])]}]}:{}))}),signal:AbortSignal.timeout(10000)});
     if(!sent.ok)throw Error('DM send '+sent.status);
     return true;
   }catch(err){console.error('[discord] Place DM:',err.message);return false;}
