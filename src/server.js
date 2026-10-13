@@ -684,7 +684,7 @@ async function receivePlaceScreenshot(message) {
   }
   await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:'stash',images:imageUrl?[imageUrl]:[],comment:stashInfo.name+(stashInfo.coords?'\nКоординаты: '+stashInfo.coords:''),created_by:draft.member_id}});
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
-  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nСхрон опубликован в SCUM HUB.'');
+  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nСхрон опубликован в SCUM HUB.');
 }
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
