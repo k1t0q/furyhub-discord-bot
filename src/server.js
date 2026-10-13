@@ -722,7 +722,7 @@ let lastProtectChannelName = '';
 let lastProtectChannelCheck = 0;
 let protectChannelSyncBusy = false;
 async function syncProtectVoiceChannel(label){
-  if(protectChannelSyncBusy || !/^\\d{15,22}$/.test(protectVoiceChannelId) || !process.env.DISCORD_BOT_TOKEN) return;
+  if(protectChannelSyncBusy || !/^\d{15,22}$/.test(protectVoiceChannelId) || !process.env.DISCORD_BOT_TOKEN) return;
   // Avoid repeated channel requests; title updates occur only on meaningful changes.
   if(lastProtectChannelName===label && Date.now()-lastProtectChannelCheck<15*60000) return;
   protectChannelSyncBusy=true;
