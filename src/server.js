@@ -278,7 +278,8 @@ async function resetPanelSelection(interaction) {
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
-  if (allowedGuild && interaction.guild_id !== allowedGuild && !(isPlaceCancel && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
+  const isStashSkip = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stash-skip';
+  if (allowedGuild && interaction.guild_id !== allowedGuild && !((isPlaceCancel || isStashSkip) && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'shop') {
@@ -339,6 +340,15 @@ async function handle(interaction) {
       ? ephem('Аккаунт ДУБЛЬ успешно привязан. Теперь можно пользоваться панелью SCUM HUB.')
       : ephem('Код недействителен, истёк или аккаунт уже привязан. Создай новый код на сайте.');
 
+  }
+  if (isStashSkip) {
+    const uid = String(interaction.user?.id || interaction.member?.user?.id || '');
+    if (!/^[0-9]{15,22}$/.test(uid)) return ephem('Не удалось определить Discord-аккаунт.');
+    const drafts = await db('discord_place_drafts',{query:'?discord_user_id=eq.'+uid+'&select=title,kind&limit=1'});
+    const title = String(drafts[0]?.title || '');
+    if (drafts[0]?.kind !== 'stash' || (!title.startsWith('STASH_COORDS:') && !title.startsWith('STASH_PHOTO:'))) return ephem('Этот шаг уже завершён или нет активного схрона.');
+    await receivePlaceScreenshot({author:{id:uid},content:'пропустить',attachments:[]});
+    return ephem('Шаг пропущен.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel') {
     const uid=String(interaction.member?.user?.id || interaction.user?.id || '');
@@ -600,7 +610,7 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 }
 
 // Gateway is required to receive screenshots pasted into direct messages.
-async function discordSendTextDM(userId,content,withCancel=false) {
+async function discordSendTextDM(userId,content,withCancel=false,withSkip=false) {
   const token=process.env.DISCORD_BOT_TOKEN;
   if(!token)return false;
   try {
@@ -608,7 +618,7 @@ async function discordSendTextDM(userId,content,withCancel=false) {
     const channel=await fetch('https://discord.com/api/v10/users/@me/channels',{method:'POST',headers,body:JSON.stringify({recipient_id:userId}),signal:AbortSignal.timeout(10000)});
     if(!channel.ok)throw Error('DM channel '+channel.status);
     const {id}=await channel.json();
-    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content,...(withCancel?{components:[{type:1,components:[{type:2,style:4,label:'Отмена',custom_id:'fury:place-cancel'}]}]}:{})}),signal:AbortSignal.timeout(10000)});
+    const sent=await fetch('https://discord.com/api/v10/channels/'+id+'/messages',{method:'POST',headers,body:JSON.stringify({content,...((withCancel || withSkip)?{components:[{type:1,components:[...(withSkip?[{type:2,style:2,label:'Пропустить',custom_id:'fury:stash-skip'}]:[]),...(withCancel?[{type:2,style:4,label:'Отмена',custom_id:'fury:place-cancel'}]:[])]}]}:{})}),signal:AbortSignal.timeout(10000)});
     if(!sent.ok)throw Error('DM send '+sent.status);
     return true;
   }catch(err){console.error('[discord] Place DM:',err.message);return false;}
@@ -640,30 +650,30 @@ async function receivePlaceScreenshot(message) {
   if(!draftState.startsWith('STASH_COORDS:')&&!draftState.startsWith('STASH_PHOTO:')){
     if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 1/3: отправь текст от 1 до 150 символов.');return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_COORDS:'+content}});
-    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли напиши **пропустить**.');
+    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли напиши **пропустить**.',false,true);
     return;
   }
   if(draftState.startsWith('STASH_COORDS:')){
     if(content.toLocaleLowerCase('ru')==='пропустить'){
       await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:''})}});
-      await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nПрикрепи фото или напиши **пропустить**.');
+      await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nПрикрепи фото или напиши **пропустить**.',false,true);
       return;
     }
     const normalized=content.replace(/,/g,'.');
     const mx=normalized.match(/\bX\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),my=normalized.match(/\bY\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),mz=normalized.match(/\bZ\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i);
-    if(!mx||!my){await discordSendTextDM(uid,'Шаг 2/3: координаты должны содержать X и Y.');return;}
+    if(!mx||!my){await discordSendTextDM(uid,'Шаг 2/3: координаты должны содержать X и Y.',false,true);return;}
     const X=Number(mx[1]),Y=Number(my[1]),Z=mz?Number(mz[1]):0;
     const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
-    if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||nx>1||ny<0||ny>1){await discordSendTextDM(uid,'Координаты вне карты SCUM. Проверь X и Y.');return;}
+    if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||nx>1||ny<0||ny>1){await discordSendTextDM(uid,'Координаты вне карты SCUM. Проверь X и Y.',false,true);return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:'X='+X+' Y='+Y+' Z='+Z})}});
-    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.\nИли напиши **пропустить**.');
+    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.\nИли напиши **пропустить**.',false,true);
     return;
   }
   let stashInfo;
   try{stashInfo=JSON.parse(draftState.slice(12));}catch{await discordSendTextDM(uid,'Ошибка черновика. Начни заново.');return;}
   const skipPhoto=content.toLocaleLowerCase('ru')==='пропустить';
   const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
-  if(!attachment&&!skipPhoto){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию или напиши «пропустить».');return;}
+  if(!attachment&&!skipPhoto){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию или напиши «пропустить».',false,true);return;}
   if(attachment&&attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
   const link=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&member_id=eq.'+draft.member_id+'&select=member_id&limit=1'});
   if(!link.length){await discordSendTextDM(uid,'Привязка аккаунта изменилась. Добавление отменено.');return;}
