@@ -76,7 +76,7 @@ async function db(table, options = {}) {
     method, headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json', Prefer: 'return=representation,resolution=merge-duplicates' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(8000)
   });
-  if (!res.ok) throw Error('Database request failed (' + res.status + ')');
+  if (!res.ok) { const detail=(await res.text()).slice(0,500); throw Error('Database '+table+' '+method+' failed ('+res.status+'): '+detail); }
   const text = await res.text(); return text ? JSON.parse(text) : [];
 }
 async function rpc(name, payload) {
@@ -662,7 +662,7 @@ async function receivePlaceScreenshot(message) {
   }
   const markerLabel={stash:'Схрон',base:'База',other:'Прочее'}[draft.kind];
   if(!draftState.startsWith('STASH_COORDS:')&&!draftState.startsWith('STASH_PHOTO:')){
-    if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 1/3: отправь текст от 1 до 150 символов.');return;}
+    if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 2/4: отправь текст от 1 до 150 символов.');return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_COORDS:'+content}});
     await discordSendTextDM(uid,'**'+markerLabel+' — шаг 3/4**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли нажми кнопку **«Пропустить»** ниже.',false,true);
     return;
@@ -675,19 +675,19 @@ async function receivePlaceScreenshot(message) {
     }
     const normalized=content.replace(/,/g,'.');
     const mx=normalized.match(/\bX\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),my=normalized.match(/\bY\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i),mz=normalized.match(/\bZ\s*[:=]?\s*(-?\d+(?:\.\d+)?)/i);
-    if(!mx||!my){await discordSendTextDM(uid,'Шаг 2/3: координаты должны содержать X и Y.',false,true);return;}
+    if(!mx||!my){await discordSendTextDM(uid,'Шаг 3/4: координаты должны содержать X и Y.',false,true);return;}
     const X=Number(mx[1]),Y=Number(my[1]),Z=mz?Number(mz[1]):0;
     const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
     if(!Number.isFinite(nx)||!Number.isFinite(ny)||nx<0||nx>1||ny<0||ny>1){await discordSendTextDM(uid,'Координаты вне карты SCUM. Проверь X и Y.',false,true);return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:'X='+X+' Y='+Y+' Z='+Z})}});
-    await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nТеперь отправь отдельным сообщением фотографию или скриншот.\nИли нажми кнопку **«Пропустить»** ниже.',false,true);
+    await discordSendTextDM(uid,'**'+markerLabel+' — шаг 4/4**\nТеперь отправь отдельным сообщением фотографию или скриншот.\nИли нажми кнопку **«Пропустить»** ниже.',false,true);
     return;
   }
   let stashInfo;
   try{stashInfo=JSON.parse(draftState.slice(12));}catch{await discordSendTextDM(uid,'Ошибка черновика. Начни заново.');return;}
   const skipPhoto=content.toLocaleLowerCase('ru')==='пропустить';
   const attachment=(message.attachments||[]).find(a=>/^image\/(png|jpeg|webp|gif)$/.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||''));
-  if(!attachment&&!skipPhoto){await discordSendTextDM(uid,'Шаг 3/3: отправь фотографию или нажми кнопку «Пропустить» ниже.',false,true);return;}
+  if(!attachment&&!skipPhoto){await discordSendTextDM(uid,'Шаг 4/4: отправь фотографию или нажми кнопку «Пропустить» ниже.',false,true);return;}
   if(attachment&&attachment.size>10*1024*1024){await discordSendTextDM(uid,'Скриншот больше 10 МБ. Отправь изображение меньшего размера.');return;}
   const link=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&member_id=eq.'+draft.member_id+'&select=member_id&limit=1'});
   if(!link.length){await discordSendTextDM(uid,'Привязка аккаунта изменилась. Добавление отменено.');return;}
