@@ -362,13 +362,14 @@ async function handle(interaction) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member=await linked(interaction);
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\nВыбери тип метки:',flags:64,components:[{type:1,components:[{type:3,custom_id:'fury:marker-kind',placeholder:'Тип метки',options:[{label:'Схрон',value:'stash',description:'Срок хранения 14 дней',emoji:{name:'📦'}},{label:'База',value:'base',description:'Постоянная метка',emoji:{name:'🏠'}},{label:'Прочее',value:'other',description:'Постоянная метка',emoji:{name:'📍'}}]}]}]}};
+    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\nВыбери тип метки:',flags:64,components:[row(button('СХРОН','fury:marker-kind:stash',2),button('БАЗА','fury:marker-kind:base',2),button('ПРОЧЕЕ','fury:marker-kind:other',2),button('ОТМЕНА','fury:marker-kind:cancel',4))]}};
   }
-  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:marker-kind') {
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id||'').startsWith('fury:marker-kind:')) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member=await linked(interaction);
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
-    const kind=interaction.data?.values?.[0];
+    const kind=String(interaction.data?.custom_id||'').slice('fury:marker-kind:'.length);
+    if(kind==='cancel')return {type:7,data:{content:'Добавление метки отменено.',components:[]}};
     if(!['stash','base','other'].includes(kind))return ephem('Некорректный тип метки.');
     const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
     await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
