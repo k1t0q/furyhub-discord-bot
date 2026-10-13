@@ -713,8 +713,8 @@ async function protectActivityText() {
   const clock = t => new Date(t).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const now = Date.now();
   if (now >= end) return 'ПРОТЕКТ СПАЛ В '+clock(end);
-  if (now < start) return 'ЗАПУСКАЕТСЯ · СПАДЁТ '+clock(end);
-  return 'АКТИВЕН · СПАДЁТ '+clock(end);
+  if (now < start) return 'ЗАПУСКАЕТСЯ · СПАДЁТ В '+clock(end);
+  return 'АКТИВЕН · СПАДЁТ В '+clock(end);
 }
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
