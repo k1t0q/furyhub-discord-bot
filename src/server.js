@@ -18,7 +18,7 @@ const panel = (publicPost = false) => ({
   data: {
     ...(publicPost ? {} : { flags: 64 }),
     embeds: [{
-      image: { url: (process.env.DISCORD_BANNER_URL || 'https://raw.githubusercontent.com/k1t0q/furyhub-discord-bot/main/%D0%90%D0%BB%D1%8B%D0%B9%20%D0%B7%D0%B0%D0%BA%D0%B0%D1%82%20%D0%BD%D0%B0%D0%B4%20%D1%83%D0%BA%D1%80%D0%B5%D0%BF%D0%BB%D1%91%D0%BD%D0%BD%D0%BE%D0%B9.png') },
+      image: { url: (process.env.DISCORD_BANNER_URL || 'https://media.discordapp.net/attachments/1173593074119737344/1559516932321837186/bbddcbe3fb752530.png?ex=6acf5cd3&is=6ace0b53&hm=9bf47ae511beb840616e7ec60f62c01545585a1d7336c0cdd61f5713eaf1c8a5&format=webp&quality=lossless&width=2048&height=722') },
       author: { name: 'ДУБЛЬ · ШТАБ ОТРЯДА' },
       title: 'SCUM HUB',
       description: '**Центр управления отрядом**\nСледи за составом, планируй рейды, управляй протектом и ресурсами базы.\n\n**ВОЗМОЖНОСТИ ШТАБА**\n**Отряд** — участие, состав и время захода.\n**База** — протект, схроны и укрепления.\n**Рейды** — планы, задачи и взрывчатка.\n\n*Выбери нужный раздел ниже, чтобы продолжить.*',
