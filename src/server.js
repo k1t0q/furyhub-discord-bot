@@ -32,7 +32,7 @@ const panel = (publicPost = false) => ({
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } },
-        { label: 'Добавить схрон', value: 'fury:add-stash', description: 'Текст → координаты → фото', emoji: { name: '📦' } }
+        { label: 'Добавить метку', value: 'fury:add-stash', description: 'Тип → текст → координаты → фото', emoji: { name: '📍' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
@@ -346,7 +346,7 @@ async function handle(interaction) {
     if (!/^[0-9]{15,22}$/.test(uid)) return ephem('Не удалось определить Discord-аккаунт.');
     const drafts = await db('discord_place_drafts',{query:'?discord_user_id=eq.'+uid+'&select=title,kind&limit=1'});
     const title = String(drafts[0]?.title || '');
-    if (drafts[0]?.kind !== 'stash' || (!title.startsWith('STASH_COORDS:') && !title.startsWith('STASH_PHOTO:'))) return ephem('Этот шаг уже завершён или нет активного схрона.');
+    if (!['stash','base','other'].includes(drafts[0]?.kind) || (!title.startsWith('STASH_COORDS:') && !title.startsWith('STASH_PHOTO:'))) return ephem('Этот шаг уже завершён или нет активного схрона.');
     await receivePlaceScreenshot({author:{id:uid},content:'пропустить',attachments:[]});
     return ephem('Шаг пропущен.');
   }
@@ -362,10 +362,19 @@ async function handle(interaction) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
     const member=await linked(interaction);
     if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    return {type:InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,data:{content:'**Добавить метку — шаг 1/4**\\nВыбери тип метки:',flags:64,components:[{type:1,components:[{type:3,custom_id:'fury:marker-kind',placeholder:'Тип метки',options:[{label:'Схрон',value:'stash',description:'Срок хранения 14 дней',emoji:{name:'📦'}},{label:'База',value:'base',description:'Постоянная метка',emoji:{name:'🏠'}},{label:'Прочее',value:'other',description:'Постоянная метка',emoji:{name:'📍'}}]}]}]}};
+  }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:marker-kind') {
+    if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: добавление отключено.');
+    const member=await linked(interaction);
+    if(!member)return ephem('Сначала привяжи Discord к аккаунту ДУБЛЬ.');
+    const kind=interaction.data?.values?.[0];
+    if(!['stash','base','other'].includes(kind))return ephem('Некорректный тип метки.');
     const uid=String(interaction.member?.user?.id||interaction.user?.id||'');
-    await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind:'stash',title:'',created_at:new Date().toISOString()}});
-    const dm=await discordSendTextDM(uid,'**Схрон — шаг 1/3**\nОтправь название или текст схрона. Для отмены напиши «отмена».',true);
-    return ephem(dm?'Открой ЛС бота. Шаг 1/3: текст схрона.':'Не удалось отправить ЛС бота.');
+    await db('discord_place_drafts',{method:'POST',query:'?on_conflict=discord_user_id',body:{discord_user_id:uid,member_id:member.id,squad_id:member.squad_id,kind,title:'',created_at:new Date().toISOString()}});
+    const label={stash:'Схрон',base:'База',other:'Прочее'}[kind];
+    const dm=await discordSendTextDM(uid,'**'+label+' — шаг 2/4**\\nОтправь название или текст метки. Для отмены напиши «отмена».',true);
+    return ephem(dm?'Открой ЛС бота. Шаг 2/4: текст метки.':'Не удалось отправить ЛС бота.');
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && ['fury:presence:Буду','fury:presence:change-time'].includes(interaction.data?.custom_id)) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
@@ -642,21 +651,22 @@ async function receivePlaceScreenshot(message) {
   }
   const content=String(message.content||'').trim();
   const draftState=String(draft.title||'');
-  if(draft.kind!=='stash'){
+  if(!['stash','base','other'].includes(draft.kind)){
     await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
-    await discordSendTextDM(uid,'Добавление базы отключено. Начни создание схрона заново.');
+    await discordSendTextDM(uid,'Неизвестный тип метки. Начни добавление заново.');
     return;
   }
+  const markerLabel={stash:'Схрон',base:'База',other:'Прочее'}[draft.kind];
   if(!draftState.startsWith('STASH_COORDS:')&&!draftState.startsWith('STASH_PHOTO:')){
     if(!content||content.length>150){await discordSendTextDM(uid,'Шаг 1/3: отправь текст от 1 до 150 символов.');return;}
     await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_COORDS:'+content}});
-    await discordSendTextDM(uid,'**Схрон — шаг 2/3**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли нажми кнопку **«Пропустить»** ниже.',false,true);
+    await discordSendTextDM(uid,'**'+markerLabel+' — шаг 3/4**\nОтправь координаты: X=123456 Y=-234567 Z=0\nИли нажми кнопку **«Пропустить»** ниже.',false,true);
     return;
   }
   if(draftState.startsWith('STASH_COORDS:')){
     if(content.toLocaleLowerCase('ru')==='пропустить'){
       await db('discord_place_drafts',{method:'PATCH',query:'?discord_user_id=eq.'+uid,body:{title:'STASH_PHOTO:'+JSON.stringify({name:draftState.slice(13),coords:''})}});
-      await discordSendTextDM(uid,'**Схрон — шаг 3/3**\nПрикрепи фото или нажми кнопку **«Пропустить»** ниже.',false,true);
+      await discordSendTextDM(uid,'**'+markerLabel+' — шаг 4/4**\nПрикрепи фото или нажми кнопку **«Пропустить»** ниже.',false,true);
       return;
     }
     const normalized=content.replace(/,/g,'.');
@@ -692,9 +702,9 @@ async function receivePlaceScreenshot(message) {
   if(!storage.ok)throw Error('Screenshot storage '+storage.status+': '+(await storage.text()).slice(0,150));
   imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
   }
-  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:'stash',images:imageUrl?[imageUrl]:[],comment:stashInfo.name+(stashInfo.coords?'\nКоординаты: '+stashInfo.coords:''),created_by:draft.member_id}});
+  await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:draft.kind,images:imageUrl?[imageUrl]:[],comment:stashInfo.name+(stashInfo.coords?'\nКоординаты: '+stashInfo.coords:''),created_by:draft.member_id}});
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
-  await discordSendTextDM(uid,'**Схрон добавлен!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nСхрон опубликован в SCUM HUB.');
+  await discordSendTextDM(uid,'**'+markerLabel+' добавлен(а)!**\nНазвание: **'+stashInfo.name+'**\nКоординаты: '+(stashInfo.coords||'не указаны')+'\nФото: '+(imageUrl?'сохранено':'не добавлено')+'\nМетка опубликована в SCUM HUB.');
 }
 // Discord bot activity mirrors the current SCUM HUB protection timer.
 let lastProtectActivity = '';
