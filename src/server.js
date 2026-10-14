@@ -229,6 +229,9 @@ async function processDiscordNotifications() {
     const memberById = new Map(members.map(m=>[m.id,m]));
     const prefById = new Map(prefs.map(p=>[p.member_id,p]));
     for (const event of events.reverse()) {
+      // Raid alarm DMs are handled by fury_alarm_dm_receipts with acknowledgement and retries.
+      // Do not also send the legacy generic notification embed for the same alarm.
+      if (event.category === 'alarm') { stats.ignoredCategory++; continue; }
       for (const link of links) {
         const member = memberById.get(link.member_id);
         if (!member || member.squad_id !== event.squad_id) { stats.ignoredSquad++; continue; }
