@@ -806,7 +806,7 @@ async function syncProtectVoiceChannel(label){
 }
 
 // Import ordinary markers posted by linked members in one Discord channel.
-const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590']);
+const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590','1553351923774783578']);
 const mapImportSeen = new Set();
 async function importDiscordMapMessage(message) {
   if (!message || !mapImportChannelIds.has(message.channel_id) || message.guild_id !== allowedGuild || message.author?.bot) return;
