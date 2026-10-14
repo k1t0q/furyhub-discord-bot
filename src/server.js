@@ -286,16 +286,18 @@ async function handle(interaction) {
     });
     if(!original.ok)return ephem('Исходное сообщение удалено или недоступно.');
     const msg=await original.json();
+    msg.guild_id=interaction.guild_id;
+    msg.channel_id=interaction.channel_id;
     if(String(msg.author?.id)!==caller)return ephem('Подтвердить или отменить маркер может только автор сообщения.');
     if(mapDecision[1]==='no')return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'❌ **Маркер не добавлен.**',components:[]}};
     const promptId=String(interaction.message?.id||'');
-    void importDiscordMapMessage(msg,true,promptId).catch(async err=>{
+    setTimeout(()=>void importDiscordMapMessage(msg,true,promptId).catch(async err=>{
       console.error('[discord] Map approval:',err.message);
       try{await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+promptId,{
         method:'PATCH',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
         body:JSON.stringify({content:'⚠️ **Не удалось сохранить маркер.** Попробуйте отправить координаты ещё раз.',components:[]}),signal:AbortSignal.timeout(7000)
       })}catch(e){console.error('[discord] Map approval notice:',e.message)}
-    });
+    }),500);
     return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'⏳ **Сохраняю маркер на карте…**',components:[]}};
   }
   const ackId=String(interaction.data?.custom_id||'').match(/^fury:alarm-ack:(\d+)$/);
@@ -906,7 +908,7 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
     }),
     signal:AbortSignal.timeout(10000)
   });
-  if (!posted.ok) console.error('[discord] Map reply failed:',posted.status);
+  if (!posted.ok) throw Error('Map reply failed ('+posted.status+'): '+(await posted.text()).slice(0,200));
 }
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
