@@ -3,7 +3,8 @@
 import json,sys
 import cv2
 import numpy as np
-BOUNDS=(361,0,1289,929)
+# 1920x1080 reference screenshot: square in-game map spans x=420..1500, full height.
+BOUNDS=(420,0,1500,1080)
 def dots(img):
     hsv=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
     mask=cv2.inRange(hsv,(0,125,110),(12,255,255))|cv2.inRange(hsv,(170,125,110),(179,255,255))
