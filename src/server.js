@@ -804,6 +804,71 @@ async function syncProtectVoiceChannel(label){
   }catch(err){console.error('[discord] Protect voice channel:',err.message)}
   finally{protectChannelSyncBusy=false}
 }
+
+// Import ordinary markers posted by linked members in one Discord channel.
+const mapImportChannelId = '1544399727653691395';
+const mapImportSeen = new Set();
+async function importDiscordMapMessage(message) {
+  if (!message || message.channel_id !== mapImportChannelId || message.guild_id !== allowedGuild || message.author?.bot) return;
+  const uid = String(message.author?.id || '');
+  const mid = String(message.id || '');
+  if (!/^\d{15,22}$/.test(uid) || !/^\d{15,22}$/.test(mid)) return;
+  const content = String(message.content || '').trim();
+  const cleaned = content.replace(/,/g,'.');
+  const xm = cleaned.match(/\bX\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
+  const ym = cleaned.match(/\bY\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
+  const zm = cleaned.match(/\bZ\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
+  if (!xm || !ym || !content) return;
+  const X=Number(xm[1]),Y=Number(ym[1]),Z=zm?Number(zm[1]):0;
+  const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
+  if (![X,Y,Z,nx,ny].every(Number.isFinite) || nx<0 || nx>1 || ny<0 || ny>1) return;
+  if (mapImportSeen.has(mid)) return;
+  mapImportSeen.add(mid);
+  if (mapImportSeen.size>1000) mapImportSeen.delete(mapImportSeen.values().next().value);
+  const refs = await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&select=member_id&limit=1'});
+  if (!refs.length) return;
+  const members=await db('members',{query:'?id=eq.'+refs[0].member_id+'&select=id,squad_id,nick&limit=1'});
+  const member=members[0];
+  if (!member?.squad_id) return;
+  const source='https://discord.com/channels/'+message.guild_id+'/'+mapImportChannelId+'/'+mid;
+  const duplicate=await db('squad_place_posts',{query:'?squad_id=eq.'+member.squad_id+'&kind=eq.other&comment=ilike.*'+mid+'*&select=id&limit=1'});
+  if (duplicate.length) return;
+  const photos=(message.attachments||[]).filter(a=>/^image\/(png|jpeg|webp|gif)$/i.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||'')).slice(0,3);
+  const images=[];
+  for (const p of photos) {
+    if (Number(p.size)>10*1024*1024) continue;
+    try {
+      const file=await fetch(p.url,{signal:AbortSignal.timeout(15000)});
+      if (!file.ok) throw Error('download '+file.status);
+      const bytes=Buffer.from(await file.arrayBuffer());
+      if (bytes.length>10*1024*1024) continue;
+      const ext=p.content_type==='image/jpeg'?'jpg':p.content_type==='image/webp'?'webp':p.content_type==='image/gif'?'gif':'png';
+      const key=member.squad_id+'/'+randomUUID()+'.'+ext;
+      const uploaded=await fetch(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/squad-place-images/'+key,{
+        method:'POST',
+        headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':ext==='jpg'?'image/jpeg':'image/'+ext,'x-upsert':'false'},
+        body:bytes,signal:AbortSignal.timeout(20000)
+      });
+      if (!uploaded.ok) throw Error('storage '+uploaded.status);
+      images.push(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+key);
+    } catch(e) {console.error('[discord] Map photo:',e.message);}
+  }
+  const title=content.replace(/\{[^}]*\}/g,' ').replace(/\b[XYZPR]\s*[:=]\s*-?\d+(?:[.,]\d+)?/gi,' ').replace(/\s+/g,' ').trim().slice(0,140)||'Маркер';
+  const comment=title+'\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
+  await db('squad_place_posts',{method:'POST',body:{squad_id:member.squad_id,kind:'other',images,comment,created_by:member.id}});
+  const posted=await fetch('https://discord.com/api/v10/channels/'+mapImportChannelId+'/messages',{
+    method:'POST',
+    headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      content:'📍 **Маркер добавлен на карту SCUM HUB**\nДобавил: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z,
+      message_reference:{type:0,message_id:mid,channel_id:mapImportChannelId,guild_id:message.guild_id,fail_if_not_exists:false},
+      allowed_mentions:{parse:[]},
+      components:[{type:1,components:[{type:2,style:5,label:'🗺️ Открыть карту',url:homepage.replace(/\/?(?:\?.*)?$/,'/')+'?section=map'}]}]
+    }),
+    signal:AbortSignal.timeout(10000)
+  });
+  if (!posted.ok) console.error('[discord] Map reply failed:',posted.status);
+}
 function startDiscordGateway() {
   if(!process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
   let socket,heartbeat,sequence=null,backoff=3000,activityTimer=null,activityBusy=false;
@@ -828,7 +893,7 @@ function startDiscordGateway() {
       if(packet.op===10){
         clearInterval(heartbeat);
         heartbeat=setInterval(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));},packet.d.heartbeat_interval);
-        socket.send(JSON.stringify({op:2,d:{token:process.env.DISCORD_BOT_TOKEN,intents:4096,properties:{os:'linux',browser:'scum-hub',device:'scum-hub'}}}));
+        socket.send(JSON.stringify({op:2,d:{token:process.env.DISCORD_BOT_TOKEN,intents:37376,properties:{os:'linux',browser:'scum-hub',device:'scum-hub'}}}));
         backoff=3000;
       }
       if(packet.t==='READY') {
@@ -840,6 +905,7 @@ function startDiscordGateway() {
       }
       if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
       if(packet.op===7 || packet.op===9)socket.close();
+      if(packet.t==='MESSAGE_CREATE' && packet.d?.channel_id===mapImportChannelId) void importDiscordMapMessage(packet.d).catch(err=>console.error('[discord] Map import:',err.message));
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
         console.error('[discord] Screenshot:',err.message);
         if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить запись. Попробуй ещё раз. Если ошибка повторится, отправь администратору логи Layero с пометкой [discord] Screenshot.');
