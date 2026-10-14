@@ -295,7 +295,7 @@ async function handle(interaction) {
     msg.channel_id=interaction.channel_id;
     if(mapScreenshotCoords.has(mapDecision[2])) {
       const item=mapScreenshotCoords.get(mapDecision[2]);
-      if(Date.now()-item.at<3600000)msg.content=item.content;
+      if(Date.now()-item.at<3600000){msg.content=item.content;msg.coordinateScreenshotAttachmentId=item.attachmentId;}
       else mapScreenshotCoords.delete(mapDecision[2]);
     }
 
@@ -978,7 +978,7 @@ async function recognizeDiscordMapScreenshot(message) {
     // The sender must approve. Keep detected coordinates only until the prompt is resolved.
     const title=String(message.content||'').trim().slice(0,120)||'Маркер';
     const augmented={...message,content:'X='+result.x+' Y='+result.y+' Z=0 '+title};
-    mapScreenshotCoords.set(String(message.id),{content:augmented.content,at:Date.now()});
+    mapScreenshotCoords.set(String(message.id),{content:augmented.content,attachmentId:String(photo.id||''),at:Date.now()});
     if(mapScreenshotCoords.size>500)mapScreenshotCoords.delete(mapScreenshotCoords.keys().next().value);
     await importDiscordMapMessage(augmented,false);
   } finally {await rm(folder,{recursive:true,force:true})}
@@ -1031,7 +1031,7 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
   const source='https://discord.com/channels/'+message.guild_id+'/'+message.channel_id+'/'+mid;
   const duplicate=await db('squad_place_posts',{query:'?squad_id=eq.'+member.squad_id+'&kind=eq.other&comment=ilike.*'+mid+'*&select=id&limit=1'});
   if (duplicate.length) return;
-  const photos=(message.attachments||[]).filter(a=>/^image\/(png|jpeg|webp|gif)$/i.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||'')).slice(0,3);
+  const photos=(message.attachments||[]).filter(a=>(/^image\/(png|jpeg|webp|gif)$/i.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||'')) && !(message.coordinateScreenshotAttachmentId && String(a.id)===String(message.coordinateScreenshotAttachmentId))).slice(0,5);
   const images=[];
   for (const p of photos) {
     if (Number(p.size)>10*1024*1024) continue;
