@@ -39,15 +39,24 @@ ny=(619659.7258-y)/(619659.7258-(-904357.527))
 if not (0<=nx<=1 and 0<=ny<=1):
     raise SystemExit("Coordinates outside map bounds")
 px=int(round(nx*(w-1)));py=int(round(ny*(h-1)))
-# Zoomed square around the point, proportionate to the source map resolution.
-size=max(1,min(570,w,h))
-left=max(0,min(px-size//2,w-size))
-top=max(0,min(py-size//2,h-size))
-crop=img[top:top+size,left:left+size].copy()
-cx=px-left;cy=py-top
-radius=max(7,round(size*0.022))
-cv2.circle(crop,(cx,cy),radius+4,(255,255,255),-1,cv2.LINE_AA)
-cv2.circle(crop,(cx,cy),radius,(25,40,230),-1,cv2.LINE_AA)
-cv2.circle(crop,(cx,cy),max(2,radius//4),(255,255,255),-1,cv2.LINE_AA)
+# Show roughly one map sector across the preview, with the marker always centered.
+# Cropping 570 source pixels produced a zoomed-out image and pushed northern markers to the edge.
+import numpy as np
+side=max(64,round(min(w,h)/5))
+half=side//2
+start_x=px-half
+start_y=py-half
+end_x=start_x+side
+end_y=start_y+side
+crop=np.full((side,side,3), (12,12,12),dtype=np.uint8)
+sx0=max(0,start_x);sy0=max(0,start_y)
+sx1=min(w,end_x);sy1=min(h,end_y)
+if sx1>sx0 and sy1>sy0:
+    crop[sy0-start_y:sy1-start_y,sx0-start_x:sx1-start_x]=img[sy0:sy1,sx0:sx1]
+crop=cv2.resize(crop,(570,570),interpolation=cv2.INTER_CUBIC)
+center=(285,285)
+cv2.circle(crop,center,17,(255,255,255),-1,cv2.LINE_AA)
+cv2.circle(crop,center,12,(25,40,230),-1,cv2.LINE_AA)
+cv2.circle(crop,center,4,(255,255,255),-1,cv2.LINE_AA)
 if not cv2.imwrite(sys.argv[4],crop):
     raise SystemExit("Failed to write preview")
