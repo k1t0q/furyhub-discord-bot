@@ -602,6 +602,36 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
+    // Map confirmation edits the public prompt directly; do not create an ephemeral deferred response.
+    if (interaction.type === InteractionType.MESSAGE_COMPONENT && /^fury:map-(?:yes|no):\d{15,22}$/.test(String(interaction.data?.custom_id||''))) {
+      json(res, 200, { type: 6 }); // DEFERRED_UPDATE_MESSAGE, no extra private "Saving..." message.
+      void (async () => {
+        try {
+          const result = await handle(interaction);
+          if (result?.type === InteractionResponseType.UPDATE_MESSAGE && interaction.data.custom_id.startsWith('fury:map-no:')) {
+            const response = await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
+              method:'PATCH',
+              headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+              body:JSON.stringify({content:result.data.content,components:[]}),
+              signal:AbortSignal.timeout(8000)
+            });
+            if(!response.ok)console.error('[discord] Map cancel edit failed:',response.status);
+          } else if(result?.type !== InteractionResponseType.UPDATE_MESSAGE) {
+            console.warn('[discord] Map decision rejected:',result?.data?.content||'Unknown');
+          }
+        } catch (error) {
+          console.error('[discord] Map decision failed:',error.message);
+          try {
+            await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
+              method:'PATCH',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+              body:JSON.stringify({content:'⚠️ Не удалось обработать подтверждение. Попробуйте отправить координаты ещё раз.',components:[]}),
+              signal:AbortSignal.timeout(8000)
+            });
+          }catch(editError){console.error('[discord] Map decision error notice:',editError.message)}
+        }
+      })();
+      return;
+    }
     const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
       (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop', 'setup'].includes(interaction.data?.name));
