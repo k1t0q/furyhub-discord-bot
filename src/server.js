@@ -277,6 +277,14 @@ async function resetPanelSelection(interaction) {
 }
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
+  const ackId=String(interaction.data?.custom_id||'').match(/^fury:alarm-ack:(\\d+)$/);
+  if(interaction.type===InteractionType.MESSAGE_COMPONENT && ackId){
+   const userId=interaction.user?.id||interaction.member?.user?.id;
+   const receipt=await db('fury_alarm_dm_receipts',{query:'?alarm_id=eq.'+ackId[1]+'&discord_user_id=eq.'+encodeURIComponent(userId)+'&select=alarm_id,member_id,acknowledged_at&limit=1'});
+   if(!receipt.length)return ephem('Это уведомление не привязано к твоему аккаунту.');
+   await db('fury_alarm_dm_receipts',{method:'PATCH',query:'?alarm_id=eq.'+ackId[1]+'&discord_user_id=eq.'+encodeURIComponent(userId),body:{acknowledged_at:new Date().toISOString()}});
+   return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'✅ **Принял.** Повторные уведомления об этой тревоге остановлены.',components:[]}};
+  }
   const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
   const isStashSkip = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stash-skip';
   const isMarkerKind = interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id||'').startsWith('fury:marker-kind:');
@@ -623,6 +631,40 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 }
 
 // Gateway is required to receive screenshots pasted into direct messages.
+
+/* FURY raid alarms: durable per-member acknowledgements and channel broadcast. */
+let furyAlarmBusy=false;
+async function processFuryAlarms(){
+ if(furyAlarmBusy || !apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
+ furyAlarmBusy=true;
+ try{
+  const jobs=await db('fury_alarm_channel_jobs',{query:'?sent_count=lt.5&select=alarm_id,sent_count&order=alarm_id.asc&limit=20'});
+  for(const job of jobs){
+   let count=job.sent_count;
+   while(count<5){
+    const res=await fetch('https://discord.com/api/v10/channels/1544399727653691395/messages',{
+     method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+     body:JSON.stringify({content:'@everyone\\n🚨 **ТРЕВОГА! НАС РЕЙДЯТ!**\\nСрочно заходите в SCUM! Нашу базу атакуют!',allowed_mentions:{parse:['everyone']}}),
+     signal:AbortSignal.timeout(12000)});
+    if(!res.ok){console.error('[raid-alarm] channel:',res.status,(await res.text()).slice(0,300));break;}
+    count++;
+    await db('fury_alarm_channel_jobs',{method:'PATCH',query:'?alarm_id=eq.'+job.alarm_id,body:{sent_count:count,updated_at:new Date().toISOString()}});
+    if(count<5)await new Promise(resolve=>setTimeout(resolve,1250));
+   }
+  }
+  const pending=await db('fury_alarm_dm_receipts',{query:'?acknowledged_at=is.null&select=alarm_id,member_id,discord_user_id,last_sent_at,send_count&order=alarm_id.asc&limit=200'});
+  const active=await db('members',{query:'?is_active=eq.true&select=id'});
+  const activeIds=new Set(active.map(x=>x.id));
+  for(const item of pending){
+   if(!activeIds.has(item.member_id))continue;
+   if(item.last_sent_at && Date.now()-Date.parse(item.last_sent_at)<59000)continue;
+   const sent=await discordSendTextDM(item.discord_user_id,'🚨 **НАС РЕЙДЯТ!**\\nСрочно заходи в SCUM для защиты базы. Нажми **Принял**, чтобы прекратить повторные сообщения.',false,false,[{type:1,components:[{type:2,style:3,label:'Принял',custom_id:'fury:alarm-ack:'+item.alarm_id}]}]);
+   if(sent)await db('fury_alarm_dm_receipts',{method:'PATCH',query:'?alarm_id=eq.'+item.alarm_id+'&member_id=eq.'+item.member_id+'&acknowledged_at=is.null',body:{last_sent_at:new Date().toISOString(),send_count:item.send_count+1}});
+  }
+ }catch(e){console.error('[raid-alarm] poll:',e.message)}
+ finally{furyAlarmBusy=false}
+}
+
 async function discordSendTextDM(userId,content,withCancel=false,withSkip=false,customComponents=null) {
   const token=process.env.DISCORD_BOT_TOKEN;
   if(!token)return false;
@@ -809,3 +851,7 @@ function startDiscordGateway() {
   connect();
 }
 startDiscordGateway();
+
+// One-minute alarm checks; keep independent from optional normal DM preferences.
+setInterval(()=>void processFuryAlarms(),60000).unref();
+void processFuryAlarms();
