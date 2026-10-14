@@ -843,8 +843,11 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
   const X=Number(xm[1]),Y=Number(ym[1]),Z=zm?Number(zm[1]):0;
   const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
   if (![X,Y,Z,nx,ny].every(Number.isFinite) || nx<0 || nx>1 || ny<0 || ny>1) return;
-  if (mapImportSeen.has(mid)) return;
-  if (!confirmed) {mapImportSeen.add(mid);if(mapImportSeen.size>1000)mapImportSeen.delete(mapImportSeen.values().next().value);}
+  if (!confirmed) {
+    if (mapImportSeen.has(mid)) return;
+    mapImportSeen.add(mid);
+    if (mapImportSeen.size>1000) mapImportSeen.delete(mapImportSeen.values().next().value);
+  }
   const refs = await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&select=member_id&limit=1'});
   if (!refs.length) return;
   const members=await db('members',{query:'?id=eq.'+refs[0].member_id+'&select=id,squad_id,nick&limit=1'});
