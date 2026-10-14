@@ -642,9 +642,9 @@ async function processFuryAlarms(){
   for(const job of jobs){
    let count=job.sent_count;
    while(count<5){
-    const res=await fetch('https://discord.com/api/v10/channels/1544399727653691395/messages',{
+    const res=await fetch('https://discord.com/api/v10/channels/1559556564208066590/messages',{
      method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
-     body:JSON.stringify({content:'@everyone\n🚨 **ТРЕВОГА! НАС РЕЙДЯТ!**\nСрочно заходите в SCUM! Нашу базу атакуют!',allowed_mentions:{parse:['everyone']}}),
+     body:JSON.stringify({content:'@everyone\n🚨 ТРЕВОГА! НАС РЕЙДЯТ!\nСрочно заходите!!!',allowed_mentions:{parse:['everyone']}}),
      signal:AbortSignal.timeout(12000)});
     if(!res.ok){console.error('[raid-alarm] channel:',res.status,(await res.text()).slice(0,300));break;}
     count++;
