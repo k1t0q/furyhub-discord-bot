@@ -768,9 +768,9 @@ async function protectActivityText() {
   const end = base + 540*60000;
   const clock = t => new Date(t).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const now = Date.now();
-  if (now >= end) return 'ПРОТЕКТ СПАЛ В '+clock(end);
-  if (now < start) return 'ЗАПУСК · СПАДЁТ В '+clock(end);
-  return 'АКТИВЕН · СПАДЁТ В '+clock(end);
+  if (now >= end) return '🔴 СПАЛ · В '+clock(end);
+  if (now < start) return '🟡 ЗАПУСК · В '+clock(end);
+  return '🟢 АКТИВЕН · ДО '+clock(end);
 }
 // Informational voice-channel title synchronized with the same protection data as bot activity.
 const protectVoiceChannelId = process.env.DISCORD_PROTECT_CHANNEL_ID || '1559467772013191189';
@@ -790,7 +790,7 @@ async function syncProtectVoiceChannel(label){
     const channel=await infoResponse.json();
     if(channel.type!==2)throw Error('Protection channel must be a voice channel');
     if(allowedGuild && channel.guild_id!==allowedGuild)throw Error('Protection channel is outside allowed Discord server');
-    const desired=('🛡️ '+label).slice(0,100);
+    const desired=label.slice(0,100);
     if(channel.name!==desired){
       const response=await fetch(url,{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({name:desired}),signal:AbortSignal.timeout(8000)});
       if(!response.ok){
