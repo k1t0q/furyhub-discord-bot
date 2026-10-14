@@ -616,7 +616,7 @@ http.createServer(async (req, res) => {
     // Preview is only visible to the clicker; never changes the approval buttons or saves data.
     const previewMatch=String(interaction.data?.custom_id||'').match(/^fury:map-preview:(\d{15,22})$/);
     if(interaction.type===InteractionType.MESSAGE_COMPONENT && previewMatch){
-      json(res,200,{type:5,data:{flags:64}});
+      json(res,200,{type:5}); // Public preview: visible to everyone in the channel.
       void (async()=>{
         const webhook='https://discord.com/api/v10/webhooks/'+encodeURIComponent(process.env.DISCORD_APPLICATION_ID)+'/'+encodeURIComponent(interaction.token)+'/messages/@original';
         const sendError=async message=>{
