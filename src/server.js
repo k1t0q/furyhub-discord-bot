@@ -3,6 +3,12 @@ import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 
 const port = Number(process.env.PORT || 3000);
 const publicKey = process.env.DISCORD_PUBLIC_KEY;
@@ -288,8 +294,14 @@ async function handle(interaction) {
     const msg=await original.json();
     msg.guild_id=interaction.guild_id;
     msg.channel_id=interaction.channel_id;
+    if(mapScreenshotCoords.has(mapDecision[2])) {
+      const item=mapScreenshotCoords.get(mapDecision[2]);
+      if(Date.now()-item.at<3600000)msg.content=item.content;
+      else mapScreenshotCoords.delete(mapDecision[2]);
+    }
+
     if(String(msg.author?.id)!==caller)return ephem('Подтвердить или отменить маркер может только автор сообщения.');
-    if(mapDecision[1]==='no')return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'❌ **Маркер не добавлен.**',components:[]}};
+    if(mapDecision[1]==='no'){mapScreenshotCoords.delete(mapDecision[2]);return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'❌ **Маркер не добавлен.**',components:[]}};}
     const promptId=String(interaction.message?.id||'');
     setTimeout(()=>void importDiscordMapMessage(msg,true,promptId).catch(async err=>{
       console.error('[discord] Map approval:',err.message);
@@ -861,6 +873,35 @@ async function syncProtectVoiceChannel(label){
 // Import ordinary markers posted by linked members in one Discord channel.
 const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590','1553351923774783578']);
 const mapImportSeen = new Set();
+const mapScreenshotCoords = new Map();
+async function recognizeDiscordMapScreenshot(message) {
+  const photo=(message.attachments||[]).find(a=>/^image\/(?:png|jpeg|webp)$/i.test(a.content_type||'') || /\.(?:png|jpe?g|webp)$/i.test(a.filename||''));
+  if (!photo || (photo.size && photo.size>10*1024*1024)) return;
+  const reference=process.env.SCUM_MAP_REFERENCE_PATH||'/opt/scum-hub-bot/map-detector/reference_map.png';
+  const folder=await mkdtemp(join(tmpdir(),'scum-map-'));
+  try {
+    const response=await fetch(photo.url,{signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw Error('Map screenshot download '+response.status);
+    const bytes=Buffer.from(await response.arrayBuffer());
+    if(bytes.length>10*1024*1024)return;
+    const filepath=join(folder,'screenshot.png');
+    await writeFile(filepath,bytes);
+    const {stdout}=await execFileAsync(process.env.SCUM_MAP_PYTHON||'/opt/scum-hub-bot/.venv/bin/python',
+      ['scripts/detect_scum_map.py',reference,filepath],{cwd:process.cwd(),timeout:25000,maxBuffer:65536});
+    const result=JSON.parse(stdout.trim());
+    if(result.status!=='detected'){
+      console.log('[discord] Map screenshot unrecognized:',result.status);
+      return;
+    }
+    // The sender must approve. Keep detected coordinates only until the prompt is resolved.
+    const title=String(message.content||'').trim().slice(0,120)||'Маркер';
+    const augmented={...message,content:'X='+result.x+' Y='+result.y+' Z=0 '+title};
+    mapScreenshotCoords.set(String(message.id),{content:augmented.content,at:Date.now()});
+    if(mapScreenshotCoords.size>500)mapScreenshotCoords.delete(mapScreenshotCoords.keys().next().value);
+    await importDiscordMapMessage(augmented,false);
+  } finally {await rm(folder,{recursive:true,force:true})}
+}
+
 async function importDiscordMapMessage(message, confirmed=false, confirmationMessageId=null) {
   if (!message || !mapImportChannelIds.has(message.channel_id) || message.guild_id !== allowedGuild || message.author?.bot) return;
   const uid = String(message.author?.id || '');
@@ -871,7 +912,10 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
   const xm = cleaned.match(/\bX\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
   const ym = cleaned.match(/\bY\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
   const zm = cleaned.match(/\bZ\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
-  if (!xm || !ym || !content) return;
+  if (!xm || !ym || !content) {
+    if (!confirmed) await recognizeDiscordMapScreenshot(message);
+    return;
+  }
   const X=Number(xm[1]),Y=Number(ym[1]),Z=zm?Number(zm[1]):0;
   const nx=(619646.8573-X)/1525015.8839,ny=(619659.7258-Y)/1524017.2528;
   if (![X,Y,Z,nx,ny].every(Number.isFinite) || nx<0 || nx>1 || ny<0 || ny>1) return;
