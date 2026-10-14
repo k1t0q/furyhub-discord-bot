@@ -806,10 +806,10 @@ async function syncProtectVoiceChannel(label){
 }
 
 // Import ordinary markers posted by linked members in one Discord channel.
-const mapImportChannelId = '1544399727653691395';
+const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590']);
 const mapImportSeen = new Set();
 async function importDiscordMapMessage(message) {
-  if (!message || message.channel_id !== mapImportChannelId || message.guild_id !== allowedGuild || message.author?.bot) return;
+  if (!message || !mapImportChannelIds.has(message.channel_id) || message.guild_id !== allowedGuild || message.author?.bot) return;
   const uid = String(message.author?.id || '');
   const mid = String(message.id || '');
   if (!/^\d{15,22}$/.test(uid) || !/^\d{15,22}$/.test(mid)) return;
@@ -830,7 +830,7 @@ async function importDiscordMapMessage(message) {
   const members=await db('members',{query:'?id=eq.'+refs[0].member_id+'&select=id,squad_id,nick&limit=1'});
   const member=members[0];
   if (!member?.squad_id) return;
-  const source='https://discord.com/channels/'+message.guild_id+'/'+mapImportChannelId+'/'+mid;
+  const source='https://discord.com/channels/'+message.guild_id+'/'+message.channel_id+'/'+mid;
   const duplicate=await db('squad_place_posts',{query:'?squad_id=eq.'+member.squad_id+'&kind=eq.other&comment=ilike.*'+mid+'*&select=id&limit=1'});
   if (duplicate.length) return;
   const photos=(message.attachments||[]).filter(a=>/^image\/(png|jpeg|webp|gif)$/i.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||'')).slice(0,3);
@@ -856,12 +856,12 @@ async function importDiscordMapMessage(message) {
   const title=content.replace(/\{[^}]*\}/g,' ').replace(/\b[XYZPR]\s*[:=]\s*-?\d+(?:[.,]\d+)?/gi,' ').replace(/\s+/g,' ').trim().slice(0,140)||'Маркер';
   const comment=title+'\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
   await db('squad_place_posts',{method:'POST',body:{squad_id:member.squad_id,kind:'other',images,comment,created_by:member.id}});
-  const posted=await fetch('https://discord.com/api/v10/channels/'+mapImportChannelId+'/messages',{
+  const posted=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+'/messages',{
     method:'POST',
     headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({
       content:'📍 **Маркер добавлен на карту SCUM HUB**\nДобавил: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z,
-      message_reference:{type:0,message_id:mid,channel_id:mapImportChannelId,guild_id:message.guild_id,fail_if_not_exists:false},
+      message_reference:{type:0,message_id:mid,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false},
       allowed_mentions:{parse:[]},
       components:[{type:1,components:[{type:2,style:5,label:'🗺️ Открыть карту',url:homepage.replace(/\/?(?:\?.*)?$/,'/')+'?section=map'}]}]
     }),
@@ -905,7 +905,7 @@ function startDiscordGateway() {
       }
       if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
       if(packet.op===7 || packet.op===9)socket.close();
-      if(packet.t==='MESSAGE_CREATE' && packet.d?.channel_id===mapImportChannelId) void importDiscordMapMessage(packet.d).catch(err=>console.error('[discord] Map import:',err.message));
+      if(packet.t==='MESSAGE_CREATE' && mapImportChannelIds.has(packet.d?.channel_id)) void importDiscordMapMessage(packet.d).catch(err=>console.error('[discord] Map import:',err.message));
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
         console.error('[discord] Screenshot:',err.message);
         if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить запись. Попробуй ещё раз. Если ошибка повторится, отправь администратору логи Layero с пометкой [discord] Screenshot.');
