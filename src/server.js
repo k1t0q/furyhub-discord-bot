@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -874,6 +874,43 @@ async function syncProtectVoiceChannel(label){
 const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590','1553351923774783578']);
 const mapImportSeen = new Set();
 const mapScreenshotCoords = new Map();
+// Install the map reference via an administrator's Discord attachment, no SSH file transfer needed.
+async function installDiscordMapReference(message){
+  if(!message||!mapImportChannelIds.has(message.channel_id)||message.guild_id!==allowedGuild)return false;
+  if(String(message.content||'').trim()!=='!setmapreference')return false;
+  const uid=String(message.author?.id||'');
+  if(!/^\d{15,22}$/.test(uid)||message.author?.bot)return true;
+  const send=async content=>{
+    const r=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+'/messages',{
+      method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({content,message_reference:{message_id:message.id,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false},allowed_mentions:{parse:[]}}),
+      signal:AbortSignal.timeout(10000)});
+    if(!r.ok)console.error('[discord] Map reference notice:',r.status);
+  };
+  try{
+    const links=await db('discord_member_links',{query:'?discord_user_id=eq.'+uid+'&select=member_id&limit=1'});
+    if(!links.length){await send('⚠️ Для установки карты нужен привязанный администратор SCUM HUB.');return true}
+    const members=await db('members',{query:'?id=eq.'+links[0].member_id+'&select=access_role&limit=1'});
+    if(!admin(members[0])){await send('⛔ Только администратор SCUM HUB может менять эталонную карту.');return true}
+    const image=(message.attachments||[]).find(a=>/image\/png/i.test(a.content_type||'') || /\.png$/i.test(a.filename||''));
+    if(!image){await send('⚠️ Прикрепи оригинальный PNG-скриншот полной карты SCUM 1920×1080.');return true}
+    if(Number(image.size||0)>12*1024*1024){await send('⚠️ Файл слишком большой (максимум 12 МБ).');return true}
+    const response=await fetch(image.url,{signal:AbortSignal.timeout(20000)});
+    if(!response.ok)throw Error('download '+response.status);
+    const bytes=Buffer.from(await response.arrayBuffer());
+    if(bytes.length>12*1024*1024||bytes.length<25)throw Error('invalid size');
+    if(bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||bytes.readUInt32BE(16)!==1920||bytes.readUInt32BE(20)!==1080){
+      await send('⚠️ Нужен PNG строго 1920×1080 с полной картой.');return true;
+    }
+    const {dirname}=await import('node:path');
+    const path=process.env.SCUM_MAP_REFERENCE_PATH||'/opt/scum-hub-bot/map-detector/reference_map.png';
+    await mkdir(dirname(path),{recursive:true});
+    await writeFile(path,bytes);
+    await send('✅ **Эталонная карта SCUM установлена на Timeweb.** Теперь можно проверять распознавание скриншотов.');
+    console.log('[discord] Map reference updated by linked admin:',uid);
+  }catch(err){console.error('[discord] Map reference install:',err.message);await send('⚠️ Не удалось установить эталонную карту. Проверь логи Timeweb.')}
+  return true;
+}
 async function recognizeDiscordMapScreenshot(message) {
   const photo=(message.attachments||[]).find(a=>/^image\/(?:png|jpeg|webp)$/i.test(a.content_type||'') || /\.(?:png|jpe?g|webp)$/i.test(a.filename||''));
   if (!photo || (photo.size && photo.size>10*1024*1024)) return;
@@ -1020,7 +1057,7 @@ function startDiscordGateway() {
       }
       if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
       if(packet.op===7 || packet.op===9)socket.close();
-      if(packet.t==='MESSAGE_CREATE' && mapImportChannelIds.has(packet.d?.channel_id)) void importDiscordMapMessage(packet.d).catch(err=>console.error('[discord] Map import:',err.message));
+      if(packet.t==='MESSAGE_CREATE' && mapImportChannelIds.has(packet.d?.channel_id)) void (async()=>{if(!await installDiscordMapReference(packet.d))await importDiscordMapMessage(packet.d);})().catch(err=>console.error('[discord] Map import:',err.message));
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
         console.error('[discord] Screenshot:',err.message);
         if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить запись. Попробуй ещё раз. Если ошибка повторится, отправь администратору логи Layero с пометкой [discord] Screenshot.');
