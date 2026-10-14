@@ -613,6 +613,52 @@ http.createServer(async (req, res) => {
   }
   try {
     const interaction = JSON.parse(body.toString('utf8'));
+    // Preview is only visible to the clicker; never changes the approval buttons or saves data.
+    const previewMatch=String(interaction.data?.custom_id||'').match(/^fury:map-preview:(\d{15,22})$/);
+    if(interaction.type===InteractionType.MESSAGE_COMPONENT && previewMatch){
+      json(res,200,{type:5,data:{flags:64}});
+      void (async()=>{
+        const webhook='https://discord.com/api/v10/webhooks/'+encodeURIComponent(process.env.DISCORD_APPLICATION_ID)+'/'+encodeURIComponent(interaction.token)+'/messages/@original';
+        const sendError=async message=>{
+          const r=await fetch(webhook,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:message}),signal:AbortSignal.timeout(10000)});
+          if(!r.ok)console.error('[discord] Map preview error response:',r.status);
+        };
+        let dir;
+        try{
+          if(!mapImportChannelIds.has(interaction.channel_id)||interaction.guild_id!==allowedGuild)throw Error('Недоступный канал.');
+          const caller=String(interaction.member?.user?.id||interaction.user?.id||'');
+          const original=await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+previewMatch[1],{
+            headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},signal:AbortSignal.timeout(8000)
+          });
+          if(!original.ok)throw Error('Исходное сообщение недоступно.');
+          const msg=await original.json();
+          if(String(msg.author?.id)!==caller)throw Error('Просмотр доступен только автору маркера.');
+          let content=String(msg.content||'');
+          const recognized=mapScreenshotCoords.get(previewMatch[1]);
+          if(recognized&&Date.now()-recognized.at<3600000)content=recognized.content;
+          const xm=content.replace(/,/g,'.').match(/\bX\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
+          const ym=content.replace(/,/g,'.').match(/\bY\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
+          if(!xm||!ym)throw Error('Координаты метки недоступны. Отправь сообщение повторно.');
+          const x=Number(xm[1]),y=Number(ym[1]);
+          dir=await mkdtemp(join(tmpdir(),'scum-preview-'));
+          const output=join(dir,'preview.png');
+          const reference=process.env.SCUM_MAP_REFERENCE_PATH||'/opt/scum-hub-bot/map-detector/reference_map.png';
+          await execFileAsync(process.env.SCUM_MAP_PYTHON||'/opt/scum-hub-bot/.venv/bin/python',
+            ['scripts/preview_scum_map.py',reference,String(x),String(y),output],
+            {cwd:process.cwd(),timeout:18000,maxBuffer:16384});
+          const image=readFileSync(output);
+          const form=new FormData();
+          form.append('payload_json',JSON.stringify({content:'🗺️ **Предпросмотр маркера**\nX='+x+' Y='+y+'\nМетка ещё не добавлена на карту.',attachments:[{id:0,filename:'scum-marker-preview.png'}]}));
+          form.append('files[0]',new Blob([image],{type:'image/png'}),'scum-marker-preview.png');
+          const result=await fetch(webhook,{method:'PATCH',body:form,signal:AbortSignal.timeout(20000)});
+          if(!result.ok)throw Error('Discord preview upload '+result.status+': '+(await result.text()).slice(0,150));
+        }catch(err){
+          console.error('[discord] Map preview:',err.message);
+          await sendError('⚠️ Не удалось показать маркер: '+String(err.message).slice(0,170));
+        }finally{if(dir)await rm(dir,{recursive:true,force:true}).catch(()=>{})}
+      })();
+      return;
+    }
     // Map confirmation edits the public prompt directly; do not create an ephemeral deferred response.
     if (interaction.type === InteractionType.MESSAGE_COMPONENT && /^fury:map-(?:yes|no):\d{15,22}$/.test(String(interaction.data?.custom_id||''))) {
       json(res, 200, { type: 6 }); // DEFERRED_UPDATE_MESSAGE, no extra private "Saving..." message.
@@ -969,11 +1015,12 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
     const prompt=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+'/messages',{
       method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
       body:JSON.stringify({
-        content:'📍 **Добавить маркер на карту SCUM HUB?**\nАвтор: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\n\nПодтверди добавление:',
+        content:'📍 **Добавить или показать маркер?**\nАвтор: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\n\nПодтверди добавление:',
         message_reference:{message_id:mid,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false},
         allowed_mentions:{parse:[]},
         components:[{type:1,components:[
           {type:2,style:3,label:'Добавить',custom_id:'fury:map-yes:'+mid},
+          {type:2,style:2,label:'Показать',custom_id:'fury:map-preview:'+mid},
           {type:2,style:4,label:'Отмена',custom_id:'fury:map-no:'+mid}
         ]}]
       }),signal:AbortSignal.timeout(10000)
