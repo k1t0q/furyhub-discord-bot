@@ -24,15 +24,16 @@ def dots(img):
 def locate(img,reference):
     x0,y0,x1,y1=BOUNDS
     base=reference[y0:y1,x0:x1]
-    orb=cv2.ORB_create(nfeatures=7500,scaleFactor=1.15,fastThreshold=10)
-    ka,da=orb.detectAndCompute(cv2.cvtColor(img,cv2.COLOR_BGR2GRAY),None)
-    kb,db=orb.detectAndCompute(cv2.cvtColor(base,cv2.COLOR_BGR2GRAY),None)
+    # SIFT is more reliable than ORB on cropped map fragments (even ~300x150px).
+    detector=cv2.SIFT_create(nfeatures=8000)
+    ka,da=detector.detectAndCompute(cv2.cvtColor(img,cv2.COLOR_BGR2GRAY),None)
+    kb,db=detector.detectAndCompute(cv2.cvtColor(base,cv2.COLOR_BGR2GRAY),None)
     if da is None or db is None:return {'status':'no_features'}
-    good=[a for a,b in cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(da,db,k=2) if a.distance<.72*b.distance]
-    if len(good)<35:return {'status':'insufficient_matches','matches':len(good)}
+    good=[a for a,b in cv2.BFMatcher(cv2.NORM_L2).knnMatch(da,db,k=2) if a.distance<.72*b.distance]
+    if len(good)<22:return {'status':'insufficient_matches','matches':len(good)}
     H,m=cv2.findHomography(np.float32([ka[p.queryIdx].pt for p in good]),np.float32([kb[p.trainIdx].pt for p in good]),cv2.RANSAC,3)
     inliers=int(m.sum()) if m is not None else 0
-    if H is None or inliers<30 or inliers/len(good)<.7:return {'status':'weak_alignment'}
+    if H is None or inliers<18 or inliers/len(good)<.75:return {'status':'weak_alignment'}
     candidates=dots(img)
     if len(candidates)!=1:return {'status':'ambiguous_red_dots','candidates':len(candidates)}
     cx,cy,score=candidates[0]
