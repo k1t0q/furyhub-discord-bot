@@ -170,11 +170,19 @@ async function sendDiscordDM(userId, event) {
   const protect = category === 'protect_updated' ? await protectDMContent(event) : null;
   const task = category === 'tasks' ? await taskDMContent(event) : null;
   const extra = await locationOrRaidDMContent(event);
+  const isPresenceReminder=category==='presence';
+  const presenceComponents=isPresenceReminder?[
+    {type:1,components:[
+      {type:2,style:3,label:'БУДУ',custom_id:'fury:dm-presence:yes'},
+      {type:2,style:2,label:'ПОД ВОПРОСОМ',custom_id:'fury:dm-presence:maybe'},
+      {type:2,style:4,label:'НЕ БУДУ',custom_id:'fury:dm-presence:no'}
+    ]}
+  ]:null;
   const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
     method: 'POST', headers,
     body: JSON.stringify({
-      embeds: [{ title: String(protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда').slice(0,4000), color: (category === 'protect' && String(event.title || '').trim().toUpperCase() === 'ПРОТЕКТ СПАЛ') ? 0xd02b37 : (dmColors[category] || 0xb32932), footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
-      components: [{ type: 1, components: [{ type: 2, style: 5, label: 'SCUM HUB', url: homepage }] }]
+      embeds: [{ title: String(isPresenceReminder ? 'УЧАСТИЕ' : (protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление')).slice(0,256), description: String(isPresenceReminder ? 'Отметь, будешь ли ты сегодня' : (protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда')).slice(0,4000), color: (category === 'protect' && String(event.title || '').trim().toUpperCase() === 'ПРОТЕКТ СПАЛ') ? 0xd02b37 : (dmColors[category] || 0xb32932), footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      components: presenceComponents || [{ type: 1, components: [{ type: 2, style: 5, label: 'SCUM HUB', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
   if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
@@ -331,6 +339,17 @@ async function handle(interaction) {
    if(!receipt.length)return ephem('Это уведомление не привязано к твоему аккаунту.');
    await db('fury_alarm_dm_receipts',{method:'PATCH',query:'?alarm_id=eq.'+ackId[1]+'&discord_user_id=eq.'+encodeURIComponent(userId),body:{acknowledged_at:new Date().toISOString()}});
    return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'✅ **Принял.** Повторные уведомления об этой тревоге остановлены.',components:[]}};
+  }
+  const presenceDmMatch=String(interaction.data?.custom_id||'').match(/^fury:dm-presence:(yes|maybe|no)$/);
+  if(interaction.type===InteractionType.MESSAGE_COMPONENT && presenceDmMatch && !interaction.guild_id){
+    if(process.env.DISCORD_TEST_MODE!=='false')return ephem('Тестовый режим: изменение данных отключено.');
+    const member=await linked(interaction);
+    if(!member)return ephem('Привяжи Discord к аккаунту SCUM HUB в настройках сайта.');
+    const status={yes:'Буду',maybe:'Под вопросом',no:'Не буду'}[presenceDmMatch[1]];
+    const day=moscowDay();
+    const old=await db('presence_history',{query:'?member_id=eq.'+member.id+'&day=eq.'+day+'&select=join_time&limit=1'});
+    await db('presence_history',{method:'POST',query:'?on_conflict=member_id,day',body:{squad_id:member.squad_id,member_id:member.id,day,status,join_time:status==='Буду'?(old[0]?.join_time||null):null,updated_at:new Date().toISOString()}});
+    return ephem('Участие на сегодня: **'+status+'**. Статус сохранён на сайте SCUM HUB.');
   }
   const isPlaceCancel = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:place-cancel';
   const isStashSkip = interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stash-skip';
