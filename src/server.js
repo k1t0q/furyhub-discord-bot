@@ -165,7 +165,7 @@ async function sendDiscordDM(userId, event) {
   const msg = await fetch('https://discord.com/api/v10/channels/' + id + '/messages', {
     method: 'POST', headers,
     body: JSON.stringify({
-      embeds: [{ title: String(protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
+      embeds: [{ title: String(protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда').slice(0,4000), color: (category === 'protect' && String(event.title || '').trim().toUpperCase() === 'ПРОТЕКТ СПАЛ') ? 0xd02b37 : (dmColors[category] || 0xb32932), footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
       components: [{ type: 1, components: [{ type: 2, style: 5, label: 'SCUM HUB', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
