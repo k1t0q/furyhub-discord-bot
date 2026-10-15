@@ -135,12 +135,12 @@ async function taskDMContent(event) {
   const title=String(event.title||'').trim();
   if(title==='Новая задача'){
     const authors=event.actor_id?await db('members',{query:'?id=eq.'+event.actor_id+'&select=nick&limit=1'}):[];
-    const author=String(authors[0]?.nick||'Участник').replace(/[*_`~|]/g,'').slice(0,100);
+    const author=String(authors[0]?.nick||'Участник').replace(/[*_\x60~|]/g,'').slice(0,100);
     const taskName=String(event.body||'Без названия').trim().slice(0,3500);
-    return {title:'НОВАЯ ЗАДАЧА',description:'**'+taskName.replace(/\\/g,'\\\\').replace(/\*/g,'\\*')+'**\\n**'+author+'**'};
+    return {title:'НОВАЯ ЗАДАЧА',description:'**'+taskName.replace(/\*/g,'\\*')+'**\n**'+author+'**'};
   }
   if(title.toLocaleUpperCase('ru-RU')==='ЗАДАЧА ВЫПОЛНЕНА'){
-    const taskName=String(event.body||'').trim().replace(/^Выполнена задача:\\s*/i,'')||'Без названия';
+    const taskName=String(event.body||'').trim().replace(/^Выполнена задача:\s*/i,'')||'Без названия';
     return {title:'ЗАДАЧА ВЫПОЛНЕНА',description:taskName.slice(0,3500)};
   }
   return null;
