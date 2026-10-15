@@ -127,7 +127,7 @@ async function protectDMContent(event) {
   const base = new Date(last.effective_at || last.updated_at);
   if (!Number.isFinite(base.getTime())) return null;
   return {
-    title: 'Протект обновлён',
+    title: 'ПРОТЕКТ ОБНОВЛЕН',
     description: '**'+(authors[0]?.nick || 'Участник')+' · '+protectClock(base)+'** обновил протект базы:\nНачало: **'+protectClock(base.getTime()+3600000)+'**\nСпадёт: **'+protectClock(base.getTime()+32400000)+'**'
   };
 }
