@@ -882,7 +882,7 @@ async function protectActivityText() {
   const clock = t => new Date(t).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
   const now = Date.now();
   if (now >= end) return '🔴 СПАЛ · В '+clock(end);
-  if (now < start) return '🟡 ЗАПУСК · В '+clock(end);
+  if (now < start) return '🟡 ЗАПУСК · В '+clock(start);
   return '🟢 АКТИВЕН · ДО '+clock(end);
 }
 // Informational voice-channel title synchronized with the same protection data as bot activity.
