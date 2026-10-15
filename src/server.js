@@ -166,7 +166,7 @@ async function sendDiscordDM(userId, event) {
     method: 'POST', headers,
     body: JSON.stringify({
       embeds: [{ title: String(protect?.title || task?.title || extra?.title || event.title || 'SCUM HUB · Уведомление').slice(0,256), description: String(protect?.description || task?.description || extra?.description || event.body || 'Новое событие отряда').slice(0,4000), color: dmColors[category] || 0xb32932, footer: { text: 'SCUM HUB | ДУБЛЬ' }, timestamp: event.created_at || new Date().toISOString() }],
-      components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Открыть ДУБЛЬ', url: homepage }] }]
+      components: [{ type: 1, components: [{ type: 2, style: 5, label: 'SCUM HUB', url: homepage }] }]
     }), signal: AbortSignal.timeout(8000)
   });
   if (!msg.ok) throw Error('DM delivery failed (' + msg.status + ')');
@@ -229,6 +229,8 @@ async function processDiscordNotifications() {
     const memberById = new Map(members.map(m=>[m.id,m]));
     const prefById = new Map(prefs.map(p=>[p.member_id,p]));
     for (const event of events.reverse()) {
+      // Suppress routine new-stash posts, but keep important stash expiry reminders.
+      if (event.category === 'stash' && event.title === 'Новое в схроне') { stats.ignoredCategory++; continue; }
       // Raid alarm DMs are handled by fury_alarm_dm_receipts with acknowledgement and retries.
       // Do not also send the legacy generic notification embed for the same alarm.
       if (event.category === 'alarm') { stats.ignoredCategory++; continue; }
