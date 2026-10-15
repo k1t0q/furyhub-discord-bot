@@ -301,8 +301,65 @@ async function resetPanelSelection(interaction) {
     if(!response.ok)console.error('[discord] Menu reset failed:',response.status);
   }catch(error){console.error('[discord] Menu reset failed:',error.message);}
 }
+
+async function clearOwnDmMessages(userId,channelId){
+ const token=process.env.DISCORD_BOT_TOKEN;
+ const headers={Authorization:'Bot '+token,'Content-Type':'application/json'};
+ const open=await fetch('https://discord.com/api/v10/users/@me/channels',{method:'POST',headers,body:JSON.stringify({recipient_id:userId}),signal:AbortSignal.timeout(9000)});
+ if(!open.ok)throw Error('Не удалось открыть личный чат');
+ const dm=(await open.json()).id;
+ if(String(dm)!==String(channelId))throw Error('Доступно только в личном чате');
+ const self=await fetch('https://discord.com/api/v10/users/@me',{headers,signal:AbortSignal.timeout(9000)});
+ if(!self.ok)throw Error('Не удалось определить бота');
+ const botId=String((await self.json()).id);
+ let before='',removed=0;
+ for(let page=0;page<30;page++){
+  const resp=await fetch('https://discord.com/api/v10/channels/'+dm+'/messages?limit=100'+(before?'&before='+before:''),{headers,signal:AbortSignal.timeout(12000)});
+  if(!resp.ok)throw Error('Ошибка чтения истории '+resp.status);
+  const messages=await resp.json();
+  if(!messages.length)break;
+  before=messages[messages.length-1].id;
+  for(const m of messages){
+   if(String(m.author?.id)!==botId)continue;
+   const del=await fetch('https://discord.com/api/v10/channels/'+dm+'/messages/'+m.id,{method:'DELETE',headers,signal:AbortSignal.timeout(10000)});
+   if(del.status===204||del.status===404){removed++;continue}
+   throw Error('Очищено '+removed+'. Ошибка удаления: '+del.status);
+  }
+  if(messages.length<100)break;
+ }
+ return removed;
+}
+async function registerGlobalClear(){
+ const token=process.env.DISCORD_BOT_TOKEN,appId=process.env.DISCORD_APPLICATION_ID;
+ if(!token||!appId)return;
+ const headers={Authorization:'Bot '+token,'Content-Type':'application/json'};
+ const url='https://discord.com/api/v10/applications/'+encodeURIComponent(appId)+'/commands';
+ try{
+  const res=await fetch(url,{headers,signal:AbortSignal.timeout(10000)});
+  if(!res.ok)throw Error('List '+res.status);
+  const commands=await res.json();
+  if(commands.some(c=>c.name==='clear'&&c.type===1))return;
+  const create=await fetch(url,{method:'POST',headers,body:JSON.stringify({name:'clear',description:'Очистить личный чат от сообщений SCUM HUB',type:1,contexts:[1],integration_types:[0]}),signal:AbortSignal.timeout(12000)});
+  if(!create.ok)throw Error('Create '+create.status+': '+(await create.text()).slice(0,180));
+  console.log('[discord] /clear registered');
+ }catch(e){console.error('[discord] /clear registration',e.message)}
+}
 async function handle(interaction) {
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
+  if(interaction.type===InteractionType.APPLICATION_COMMAND&&interaction.data?.name==='clear'){
+   if(interaction.guild_id)return ephem('Команда работает только в личке с ботом.');
+   return ephem('Удалить сообщения бота SCUM HUB из этого чата? Твои сообщения останутся.',[row(button('Очистить','fury:clear:confirm',4),button('Отмена','fury:clear:cancel'))]);
+  }
+  if(interaction.type===InteractionType.MESSAGE_COMPONENT&&interaction.data?.custom_id==='fury:clear:cancel')
+   return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'Очистка отменена.',components:[]}};
+  if(interaction.type===InteractionType.MESSAGE_COMPONENT&&interaction.data?.custom_id==='fury:clear:confirm'){
+   if(interaction.guild_id)return ephem('Очистка работает только в личке.');
+   const uid=String(interaction.user?.id||'');
+   if(!/^\d{15,22}$/.test(uid))return ephem('Неизвестный пользователь.');
+   const n=await clearOwnDmMessages(uid,interaction.channel_id);
+   return ephem('Удалено сообщений бота: **'+n+'**.');
+  }
+
   const mapDecision=String(interaction.data?.custom_id||'').match(/^fury:map-(yes|no):(\d{15,22})$/);
   if(interaction.type===InteractionType.MESSAGE_COMPONENT && mapDecision){
     const caller=String(interaction.member?.user?.id||interaction.user?.id||'');
@@ -723,7 +780,7 @@ http.createServer(async (req, res) => {
     }
     const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
       (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
-      (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop', 'setup'].includes(interaction.data?.name));
+      (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop', 'setup'].includes(interaction.data?.name)) || (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:clear:confirm');
     if (!isDeferred) {
       const reply = await handle(interaction);
       if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:menu') void resetPanelSelection(interaction);
@@ -764,6 +821,7 @@ http.createServer(async (req, res) => {
 }).listen(port, '0.0.0.0', () => {
   console.log('FURY HUB Discord interactions listening on port', port);
   void registerGuildCommand();
+  void registerGlobalClear();
 });
 
 if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && process.env.DISCORD_DM_START_AT && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT))) {
