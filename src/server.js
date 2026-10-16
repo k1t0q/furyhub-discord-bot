@@ -432,17 +432,6 @@ async function handle(interaction) {
     }
     return ephem('Магазин опубликован отдельным сообщением от имени SCUM HUB. Закрепи его в канале.');
   }
-  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'status') {
-    const perms = BigInt(interaction.member?.permissions || '0');
-    if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Диагностика доступна только администраторам сервера.');
-    if (!apiReady()) return ephem('**SCUM HUB · диагностика**\nSupabase: переменные отсутствуют.');
-    try {
-      await db('members', { query: '?select=id&limit=1' });
-      return ephem('**SCUM HUB · диагностика**\nDiscord: подключён\nSupabase: подключён (запрос выполнен)\nИзменение данных: '+(process.env.DISCORD_TEST_MODE === 'false' ? 'разрешено' : 'тестовый режим')+'\nЛичные уведомления: '+(process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT || '')) ? 'включены' : 'отключены'));
-    } catch (error) {
-      return ephem('**SCUM HUB · диагностика**\nSupabase: ошибка соединения (' + String(error.message).slice(0,100) + ')');
-    }
-  }
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'setup') {
     const p = BigInt(interaction.member?.permissions || '0');
     if ((p & 0x8n) === 0n && (p & 0x20n) === 0n) return ephem('Недостаточно прав.');
@@ -652,7 +641,7 @@ async function registerGuildCommand() {
     const result = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'shop', description: 'Опубликовать панель магазина SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }, { name: 'status', description: 'Проверить состояние интеграции SCUM HUB', type: 1 }]),
+      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'shop', description: 'Опубликовать панель магазина SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
