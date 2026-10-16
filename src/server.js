@@ -377,7 +377,8 @@ async function handle(interaction) {
       else mapScreenshotCoords.delete(mapDecision[2]);
     }
 
-    if(String(msg.author?.id)!==caller)return ephem('Подтвердить или отменить маркер может только автор сообщения.');
+    if(mapDecision[1]==='no' && String(msg.author?.id)!==caller)return ephem('Отменить маркер может только автор сообщения.');
+    if(mapDecision[1]==='yes' && !(await linked(interaction)))return ephem('Для добавления маркера привяжи Discord к SCUM HUB.');
     if(mapDecision[1]==='no'){mapScreenshotCoords.delete(mapDecision[2]);return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'❌ **Маркер не добавлен.**',components:[]}};}
     const promptId=String(interaction.message?.id||'');
     setTimeout(()=>void importDiscordMapMessage(msg,true,promptId).catch(async err=>{
@@ -721,7 +722,7 @@ http.createServer(async (req, res) => {
           });
           if(!original.ok)throw Error('Исходное сообщение недоступно.');
           const msg=await original.json();
-          if(String(msg.author?.id)!==caller)throw Error('Просмотр доступен только автору маркера.');
+          if(!(await linked(interaction)))throw Error('Для просмотра маркера привяжи Discord к SCUM HUB.');
           let content=String(msg.content||'');
           const recognized=mapScreenshotCoords.get(previewMatch[1]);
           if(recognized&&Date.now()-recognized.at<3600000)content=recognized.content;
