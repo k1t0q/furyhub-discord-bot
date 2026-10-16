@@ -414,7 +414,7 @@ async function handle(interaction) {
   const isMarkerKind = interaction.type === InteractionType.MESSAGE_COMPONENT && String(interaction.data?.custom_id||'').startsWith('fury:marker-kind:');
   if (allowedGuild && interaction.guild_id !== allowedGuild && !((isPlaceCancel || isStashSkip || isMarkerKind) && !interaction.guild_id)) return ephem('Бот доступен только на сервере отряда.');
   const name = interaction.data?.name;
-  if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'fury') return panel();
+
   if (interaction.type === InteractionType.APPLICATION_COMMAND && name === 'shop') {
     const perms = BigInt(interaction.member?.permissions || '0');
     if ((perms & 0x8n) === 0n && (perms & 0x20n) === 0n) return ephem('Опубликовать панель магазина может только администратор.');
@@ -641,7 +641,7 @@ async function registerGuildCommand() {
     const result = await fetch(url, {
       method: 'PUT',
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ name: 'fury', description: 'Открыть панель управления SCUM HUB', type: 1 }, { name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'shop', description: 'Опубликовать панель магазина SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }]),
+      body: JSON.stringify([{ name: 'setup', description: 'Опубликовать постоянную панель SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'shop', description: 'Опубликовать панель магазина SCUM HUB (администратор)', type: 1, default_member_permissions: '32' }, { name: 'link', description: 'Привязать аккаунт ДУБЛЬ к Discord', type: 1, options: [{ name: 'code', description: 'Одноразовый код из настроек сайта', type: 3, required: true }] }]),
       signal: AbortSignal.timeout(12000)
     });
     if (!result.ok) {
