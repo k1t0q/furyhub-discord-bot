@@ -546,7 +546,8 @@ async function handle(interaction) {
     }
     const today=await db('presence_history',{query:squad+'&day=eq.'+moscowDay()+'&select=member_id,status,join_time'});
     const members=await db('members',{query:squad+'&select=id,nick'});
-    const lines=today.map(p=>(members.find(x=>x.id===p.member_id)?.nick||'Участник')+' — '+p.status+(p.join_time?' ('+p.join_time.slice(0,5)+')':''));
+    const activeMembers=new Map(members.map(x=>[String(x.id),x.nick]));
+    const lines=today.filter(p=>activeMembers.has(String(p.member_id))).map(p=>activeMembers.get(String(p.member_id))+' — '+p.status+(p.join_time?' ('+p.join_time.slice(0,5)+')':''));
     return ephem('**Моё участие · сегодня**\n'+(lines.join('\n')||'Пока нет отметок.'),[row(button('Буду','fury:presence:Буду',3),button('Под вопросом','fury:presence:Под вопросом'),button('Не буду','fury:presence:Не буду',4)),row(button('Изменить время','fury:presence:change-time'))]);
   }
   if (section==='protect') {
