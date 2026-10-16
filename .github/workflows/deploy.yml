@@ -1,0 +1,28 @@
+name: Deploy SCUM HUB to Timeweb
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: scum-hub-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.TIMEWEB_HOST }}
+          SSH_USER: ${{ secrets.TIMEWEB_USER }}
+          SSH_KEY: ${{ secrets.TIMEWEB_SSH_KEY }}
+          SSH_PORT: ${{ secrets.TIMEWEB_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          PORT="${SSH_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'sudo /usr/local/sbin/deploy-scum-hub-bot'
