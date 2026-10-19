@@ -56,7 +56,7 @@ const shopPanel = () => ({
     components: [
       row(
         { type: 2, style: 5, label: 'СПАЛКА', emoji: { name: '🛏️' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539032826056826' },
-        { type: 2, style: 5, label: 'МОТ / АРЕНДА', emoji: { name: '🏍️' }, url: 'https://discord.com/channels/691786588450979950/1491692548178051186/1504736726285811753' },
+        { type: 2, style: 5, label: 'АРЕНДА', emoji: { name: '🏍️' }, url: 'https://discord.com/channels/691786588450979950/1491692548178051186/1504736726285811753' },
         { type: 2, style: 5, label: 'СУНДУК', emoji: { name: '📦' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539029231665223' },
         { type: 2, style: 5, label: 'ЗАМОК', emoji: { name: '🔒' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539016191451206' },
         { type: 2, style: 5, label: 'БРОНИК', emoji: { name: '🦺' }, url: 'https://discord.com/channels/691786588450979950/1561716236667199579/1561716983156834336' }
