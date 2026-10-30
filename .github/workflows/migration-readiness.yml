@@ -1,14 +1,17 @@
-name: Inspect Discord migration readiness
+name: Deploy Discord D1 migration
 on:
   push:
     branches: [scum-hub-migration]
-    paths: ['.github/workflows/migration-readiness.yml']
+    paths: ['.github/workflows/migration-readiness.yml', 'src/**', 'tests/**', 'package.json', 'package-lock.json']
   workflow_dispatch:
+concurrency:
+  group: discord-d1-migration-deploy
+  cancel-in-progress: false
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect existing bot service without changing it
+      - name: Deploy migration bot and verify connections
         env:
           SSH_HOST: ${{ secrets.TIMEWEB_HOST }}
           SSH_USER: ${{ secrets.TIMEWEB_USER }}
