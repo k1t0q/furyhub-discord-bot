@@ -17,7 +17,7 @@ let migrationGatewayReady=false;
 const port = Number(process.env.PORT || 3000);
 const publicKey = process.env.DISCORD_PUBLIC_KEY;
 const allowedGuild = process.env.DISCORD_GUILD_ID;
-const homepage = process.env.FURYHUB_URL || 'https://scumhub.layero.app/';
+const homepage = 'https://scum-hub.ru/';
 const json = (res, status, payload) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(payload));
