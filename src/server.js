@@ -1,3 +1,4 @@
+import {queueMigrationReminders} from './migration-reminders.js';
 import {createD1Backend} from './d1-backend.js';
 const d1Backend=createD1Backend();
 import http from 'node:http';
@@ -238,6 +239,7 @@ async function processDiscordNotifications() {
   discordDmPolling = true;
   const stats = { events: 0, links: 0, enabled: 0, candidates: 0, claimed: 0, sent: 0, failed: 0, ignoredActor: 0, ignoredCategory: 0, ignoredSquad: 0, unclaimed: 0 };
   try {
+    if(d1Backend.ready())await queueMigrationReminders(db);
     const expiredQueued = await queueExpiredProtectNotifications(launchAt);
     if (expiredQueued) console.log('[discord] Protect expired notices queued:', expiredQueued);
     const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
