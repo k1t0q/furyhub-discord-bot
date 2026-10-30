@@ -676,7 +676,12 @@ http.createServer(async (req, res) => {
     try {
       if (!d1Backend.ready()) return json(res,503,{ok:false,backend:'d1',database:'not_configured'});
       await d1Backend.db('members',{query:'?select=id&limit=1'});
-      return json(res,200,{ok:true,service:'furyhub-discord-bot',backend:'d1',database:'ok',testMode:process.env.DISCORD_TEST_MODE!=='false',notificationsEnabled:process.env.DISCORD_DM_NOTIFICATIONS==='true'});
+      const [discord,imagekit]=await Promise.all([
+        fetch('https://discord.com/api/v10/users/@me',{headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},signal:AbortSignal.timeout(10000)}),
+        fetch('https://api.imagekit.io/v1/files?limit=1',{headers:{Authorization:'Basic '+Buffer.from(process.env.IMAGEKIT_PRIVATE_KEY.trim()+':').toString('base64')},signal:AbortSignal.timeout(10000)})
+      ]);
+      if(!discord.ok||!imagekit.ok)return json(res,503,{ok:false,backend:'d1',database:'ok',discord:discord.status,imagekit:imagekit.status});
+      return json(res,200,{ok:true,service:'furyhub-discord-bot',backend:'d1',database:'ok',discord:'ok',imagekit:'ok',testMode:process.env.DISCORD_TEST_MODE!=='false',notificationsEnabled:process.env.DISCORD_DM_NOTIFICATIONS==='true'});
     } catch { return json(res,503,{ok:false,backend:'d1',database:'unavailable'}); }
   }
   if (req.method !== 'POST' || req.url !== '/interactions') return json(res, 404, { error: 'Not found' });
@@ -843,6 +848,8 @@ async function processFuryAlarms(){
  try{
   const jobs=await db('fury_alarm_channel_jobs',{query:'?sent_count=lt.5&select=alarm_id,sent_count&order=alarm_id.asc&limit=20'});
   for(const job of jobs){
+   const source=await db('squad_raid_alarms',{query:'?id=eq.'+job.alarm_id+'&select=created_at&limit=1'});
+   if(!source[0]||Date.now()-Date.parse(source[0].created_at)>300000){await db('fury_alarm_channel_jobs',{method:'PATCH',query:'?alarm_id=eq.'+job.alarm_id,body:{sent_count:5,updated_at:new Date().toISOString()}});continue}
    let count=job.sent_count;
    while(count<5){
     const res=await fetch('https://discord.com/api/v10/channels/1559556564208066590/messages',{
