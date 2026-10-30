@@ -41,7 +41,7 @@ const panel = (publicPost = false) => ({
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
       ] }),
-      row({ type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
+      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
   }
 });
@@ -620,7 +620,7 @@ async function handle(interaction) {
     const word=(n)=>{const m=n%100,a=n%10;return m>=11&&m<=14?'СТЕН':a===1?'СТЕНУ':a>=2&&a<=4?'СТЕНЫ':'СТЕН';};
     return ephem('**ВЗРЫВ · ЗАПАСЫ**\n'+lines.join('\n')+'\n\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**',[row({type:2,style:5,label:'ПЕРЕЙТИ К ВЗРЫВУ ↗',url:homepage.replace(/\/$/,'')+'/?section=explosives'})]);
   }
-  if (section==='alarm') { return ephem('Рассылка тревоги отключена владельцем.');
+  if (section==='alarm') {
     if(action==='confirm') {
       const sent = await rpc('raise_discord_raid_alarm',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
       if (sent !== true) return ephem('Тревога уже отправлялась за последние 5 минут. Повторная отправка заблокирована.');
@@ -837,8 +837,7 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 
 /* FURY raid alarms: durable per-member acknowledgements and channel broadcast. */
 let furyAlarmBusy=false;
-async function processFuryAlarms(){return; // Acknowledgement-based alarm distribution disabled by owner.
-
+async function processFuryAlarms(){
  if(furyAlarmBusy || !apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
  furyAlarmBusy=true;
  try{
@@ -855,15 +854,6 @@ async function processFuryAlarms(){return; // Acknowledgement-based alarm distri
     await db('fury_alarm_channel_jobs',{method:'PATCH',query:'?alarm_id=eq.'+job.alarm_id,body:{sent_count:count,updated_at:new Date().toISOString()}});
     if(count<5)await new Promise(resolve=>setTimeout(resolve,1250));
    }
-  }
-  const pending=await db('fury_alarm_dm_receipts',{query:'?acknowledged_at=is.null&select=alarm_id,member_id,discord_user_id,last_sent_at,send_count&order=alarm_id.asc&limit=200'});
-  const active=await db('members',{query:'?is_active=eq.true&select=id'});
-  const activeIds=new Set(active.map(x=>x.id));
-  for(const item of pending){
-   if(!activeIds.has(item.member_id))continue;
-   if(item.last_sent_at && Date.now()-Date.parse(item.last_sent_at)<59000)continue;
-   const sent=await discordSendTextDM(item.discord_user_id,'🚨 **НАС РЕЙДЯТ!**\nСрочно заходи в SCUM для защиты базы. Нажми **Принял**, чтобы прекратить повторные сообщения.',false,false,[{type:1,components:[{type:2,style:3,label:'Принял',custom_id:'fury:alarm-ack:'+item.alarm_id}]}]);
-   if(sent)await db('fury_alarm_dm_receipts',{method:'PATCH',query:'?alarm_id=eq.'+item.alarm_id+'&member_id=eq.'+item.member_id+'&acknowledged_at=is.null',body:{last_sent_at:new Date().toISOString(),send_count:item.send_count+1}});
   }
  }catch(e){console.error('[raid-alarm] poll:',e.message)}
  finally{furyAlarmBusy=false}
