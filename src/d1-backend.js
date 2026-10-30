@@ -12,7 +12,7 @@ export function createD1Backend(env=process.env,fetcher=fetch){
  async function db(table,{method='GET',query='',body}={}){
  if(!allowed.has(table))throw Error('Table not allowed');const q=new URLSearchParams(query.replace(/^\?/,'')),args=[],clauses=[];
  for(const [k,v] of q){if(['select','limit','order','on_conflict'].includes(k))continue;const c=ident(k),pos=v.indexOf('.'),op=v.slice(0,pos),raw=v.slice(pos+1);if(op==='is'&&raw==='null'){clauses.push(c+' IS NULL');continue}if(op==='in'){const vals=raw.replace(/^\(|\)$/g,'').split(',');clauses.push(c+' IN ('+vals.map(()=>'?').join(',')+')');args.push(...vals);continue}const ops={eq:'=',neq:'!=',lt:'<',lte:'<=',gt:'>',gte:'>=',ilike:'LIKE'};if(!ops[op])throw Error('Unsupported query filter');clauses.push(c+' '+ops[op]+' ?');args.push(raw==='true'?1:raw==='false'?0:op==='ilike'?raw.replaceAll('*','%'):raw)}
- if(table==='members')clauses.push('is_active=1');
+ if(table==='members'&&method==='GET')clauses.push('is_active=1');
  const where=clauses.length?' WHERE '+clauses.join(' AND '):'';
  const fields=q.get('select')||'*',select=fields==='*'?'*':fields.split(',').map(ident).join(',');
  if(method==='GET'){let order='';if(q.get('order')){const [col,dir]=q.get('order').split('.');order=' ORDER BY '+ident(col)+(dir==='desc'?' DESC':' ASC')}return signRows(await sql('SELECT '+select+' FROM '+ident(table)+where+order+' LIMIT '+Math.min(1000,Number(q.get('limit'))||1000),args))}
