@@ -26,4 +26,4 @@ jobs:
           chmod 600 ~/.ssh/migration_key
           PORT="${SSH_PORT:-22}"
           ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'systemctl is-active scum-hub-bot; systemctl show scum-hub-bot -p FragmentPath -p WorkingDirectory -p EnvironmentFiles; cd /opt/scum-hub-bot && git branch --show-current && git rev-parse HEAD'
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'systemctl is-active scum-hub-bot; systemctl show scum-hub-bot -p FragmentPath -p WorkingDirectory -p EnvironmentFiles; cd /opt/scum-hub-bot && git -c safe.directory=/opt/scum-hub-bot branch --show-current && git -c safe.directory=/opt/scum-hub-bot rev-parse HEAD; ls -ld /opt/scum-hub-bot; sudo -n -l'
