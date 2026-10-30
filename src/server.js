@@ -41,7 +41,7 @@ const panel = (publicPost = false) => ({
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
         { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
       ] }),
-      row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
+      row({ type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
   }
 });
@@ -620,7 +620,7 @@ async function handle(interaction) {
     const word=(n)=>{const m=n%100,a=n%10;return m>=11&&m<=14?'СТЕН':a===1?'СТЕНУ':a>=2&&a<=4?'СТЕНЫ':'СТЕН';};
     return ephem('**ВЗРЫВ · ЗАПАСЫ**\n'+lines.join('\n')+'\n\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**',[row({type:2,style:5,label:'ПЕРЕЙТИ К ВЗРЫВУ ↗',url:homepage.replace(/\/$/,'')+'/?section=explosives'})]);
   }
-  if (section==='alarm') {
+  if (section==='alarm') { return ephem('Рассылка тревоги отключена владельцем.');
     if(action==='confirm') {
       const sent = await rpc('raise_discord_raid_alarm',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
       if (sent !== true) return ephem('Тревога уже отправлялась за последние 5 минут. Повторная отправка заблокирована.');
@@ -837,7 +837,8 @@ if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_
 
 /* FURY raid alarms: durable per-member acknowledgements and channel broadcast. */
 let furyAlarmBusy=false;
-async function processFuryAlarms(){
+async function processFuryAlarms(){return; // Acknowledgement-based alarm distribution disabled by owner.
+
  if(furyAlarmBusy || !apiReady() || !process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TEST_MODE!=='false')return;
  furyAlarmBusy=true;
  try{
