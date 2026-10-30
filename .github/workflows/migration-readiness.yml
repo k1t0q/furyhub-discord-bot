@@ -26,4 +26,4 @@ jobs:
           chmod 600 ~/.ssh/migration_key
           PORT="${SSH_PORT:-22}"
           ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; curl -fsS --max-time 20 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; if ! curl -fsS --max-time 30 http://127.0.0.1:3000/health; then sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration rollback; exit 1; fi; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status'
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'node --version; /usr/bin/node --version; command -v node; systemctl is-active scum-hub-bot; journalctl -u scum-hub-bot --since "20 minutes ago" --no-pager -n 50 2>&1 | tail -35'
