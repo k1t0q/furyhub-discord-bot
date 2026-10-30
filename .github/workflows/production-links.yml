@@ -1,0 +1,33 @@
+name: Update Discord production links
+on:
+  push:
+    branches: [scum-hub-migration]
+    paths: ['.github/workflows/production-links.yml']
+  workflow_dispatch:
+concurrency:
+  group: discord-d1-migration-deploy
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy migration bot and verify connections
+        env:
+          SSH_HOST: ${{ secrets.TIMEWEB_HOST }}
+          SSH_USER: ${{ secrets.TIMEWEB_USER }}
+          SSH_KEY: ${{ secrets.TIMEWEB_SSH_KEY }}
+          SSH_PORT: ${{ secrets.TIMEWEB_PORT }}
+          D1_TOKEN: ${{ secrets.SCUM_CLOUDFLARE_API_TOKEN }}
+          IMAGEKIT_KEY: ${{ secrets.SCUM_IMAGEKIT_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY"
+          test -z "$D1_TOKEN" && echo "D1 credential: unavailable in bot repository" || echo "D1 credential: available"
+          test -z "$IMAGEKIT_KEY" && echo "ImageKit credential: unavailable in bot repository" || echo "ImageKit credential: available"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/migration_key
+          chmod 600 ~/.ssh/migration_key
+          PORT="${SSH_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+          printf '%s' 'MIIDTQYJKoZIhvcNAQcDoIIDPjCCAzoCAQAxggHRMIIBzQIBADA1MB0xGzAZBgNVBAMMEnNjdW0taHViLW1pZ3JhdGlvbgIUAL9QuI63c7CFbRpqAyOxftZR5+4wDQYJKoZIhvcNAQEBBQAEggGAOQop2K6jiy3C3wjSWEyriN3nnzTxJZkFwCCSiLDf+eJHp7GnJFPskenROlvU+LWWouEtf5As4vJg3WKXumltTPulo24VFwiZ7GAi6VXVDWm7Y0pMDY0ybuhg7HGk+uOMG2NrNK09X+GEauWIEYL11e0ZF7tstlK92C6GSeoXPIwMOTJHtDYKFSfTNqLUvuGgyj0or5sA8sEoJHu13hPdU6BpHCJ9Olsp85gx/WI89bvEKyrlKqD9hnLUttreHlm4rLGsC+AT1qjjLm43IVy6Nv2A8+U6uXjCp9d3E11/qSbO7+4/ludTf97pee3AzB9jsckh8r/NCkcMhyVnhQ8nOzEOF2yUzvxFVQ3UFLVPnPK91Nv6f/gykpfKBIl4KjTbto8ENZC4A3gE4nc3gqyJ+wbQXBXm3kBz8Q5QVxh8waQSXF5UtXI3tRwCIFBLCngktSVlkTaHNkysL1sOKYM+U1I3hftmTR7Mi//IK03C3sf/nFlKeBVO4YFXNlgxet77MIIBXgYJKoZIhvcNAQcBMB0GCWCGSAFlAwQBKgQQ4JEM0sw/ckkyair0zy8WR4CCATCYuotcCVNUtnfB+0iWlvjzTuq7tvYTyLSRCd3djzyFVg0HUEkHtDy2VakZvWg1CCPTbJ22L7Wl6ZfKUDex7P5d+qJZdTvPdB7Yfly22u2xYHhm7v0r1SqYueIQdS+bDXmhUYfNulrlKT71IlWZ8UQKdEpqfvJJfPuSbJxZWjoiyK/p6WRZTgItaMZXEJ0RZ3AvXH1uUusjEUyg25CRS6QYyIVNIXob19QRRi1ZytYZ4CHPunZowwyexDKyoJU8mY5Iv3AYWsy1fMAzNXsju9/PSd6H2dtH+giFi67mvtMWj7lZP3EuVdrTcx45iUwOcZeeTA325oP/XWxQSCBksZ7WnFtw9v1xPFuBxoJvMp3X3rSV4ZlIocxKrwDfCUFtxv7guuN+QZxu+upOv48MqzOA' | ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration configure'
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; if ! curl -fsS --max-time 30 http://127.0.0.1:3000/health; then sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration rollback; exit 1; fi; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status'
