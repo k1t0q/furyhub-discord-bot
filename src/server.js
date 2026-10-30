@@ -74,7 +74,7 @@ const shopPanel = () => ({
       ),
       row(
         { type: 2, style: 5, label: 'ОБМЕН ВАЛЮТЫ', emoji: { name: '💱' }, url: 'https://discord.com/channels/691786588450979950/1486994381276840028' },
-        { type: 2, style: 5, label: 'MAIN', emoji: { name: '🏠' }, url: 'https://discord.com/channels/691786588450979950/1486624684127686796' }
+        { type: 2, style: 5, label: 'БАНК', emoji: { name: '🏠' }, url: 'https://discord.com/channels/691786588450979950/1486624684127686796' }
       )
     ]
   }
