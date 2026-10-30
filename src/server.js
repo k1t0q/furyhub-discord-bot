@@ -672,7 +672,13 @@ http.createServer(async (req, res) => {
       return json(res, 404, { error: 'Banner unavailable' });
     }
   }
-  if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true, service: 'furyhub-discord-bot' });
+  if (req.method === 'GET' && req.url === '/health') {
+    try {
+      if (!d1Backend.ready()) return json(res,503,{ok:false,backend:'d1',database:'not_configured'});
+      await d1Backend.db('members',{query:'?select=id&limit=1'});
+      return json(res,200,{ok:true,service:'furyhub-discord-bot',backend:'d1',database:'ok',testMode:process.env.DISCORD_TEST_MODE!=='false',notificationsEnabled:process.env.DISCORD_DM_NOTIFICATIONS==='true'});
+    } catch { return json(res,503,{ok:false,backend:'d1',database:'unavailable'}); }
+  }
   if (req.method !== 'POST' || req.url !== '/interactions') return json(res, 404, { error: 'Not found' });
   if (!publicKey) { console.error('[discord] DISCORD_PUBLIC_KEY missing'); return json(res, 503, { error: 'Missing Discord public key' }); }
   const chunks = [];
