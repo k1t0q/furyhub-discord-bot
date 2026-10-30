@@ -71,6 +71,10 @@ const shopPanel = () => ({
         { type: 2, style: 5, label: 'РЕМКА', emoji: { name: '🔧' }, url: 'https://discord.com/channels/691786588450979950/1491686083425992786/1491686179660107846' },
         { type: 2, style: 5, label: 'ЗАМОК', emoji: { name: '🔒' }, url: 'https://discord.com/channels/691786588450979950/1486645663767859351/1551539016191451206' },
         { type: 2, style: 5, label: 'ШВЕЙКА', emoji: { name: '🧵' }, url: 'https://discord.com/channels/691786588450979950/1486612928110264463/1486671100531441694' }
+      ),
+      row(
+        { type: 2, style: 5, label: 'ОБМЕН ВАЛЮТЫ', emoji: { name: '💱' }, url: 'https://discord.com/channels/691786588450979950/1486994381276840028' },
+        { type: 2, style: 5, label: 'MAIN', emoji: { name: '🏠' }, url: 'https://discord.com/channels/691786588450979950/1486624684127686796' }
       )
     ]
   }
