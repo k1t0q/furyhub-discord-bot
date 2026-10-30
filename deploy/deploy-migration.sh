@@ -83,7 +83,7 @@ activate)
   grep -q '^IMAGEKIT_PRIVATE_KEY=.' "$CONFIG"
   mkdir -p "$(dirname "$OVERRIDE")"
   test ! -e "$OVERRIDE" || cp "$OVERRIDE" "$OVERRIDE.previous"
-  printf '%s\n' '[Service]' "EnvironmentFile=$CONFIG" "WorkingDirectory=$BASE" 'ExecStart=' "/usr/bin/node $BASE/src/server.js" > "$OVERRIDE"
+  printf '%s\n' '[Service]' "EnvironmentFile=$CONFIG" "WorkingDirectory=$BASE" 'ExecStart=' "ExecStart=/usr/bin/node $BASE/src/server.js" > "$OVERRIDE"
   systemctl daemon-reload
   if ! systemctl restart scum-hub-bot || ! systemctl is-active --quiet scum-hub-bot; then
     rm -f "$OVERRIDE"
