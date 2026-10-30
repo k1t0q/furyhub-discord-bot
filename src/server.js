@@ -1,3 +1,5 @@
+import {createD1Backend} from './d1-backend.js';
+const d1Backend=createD1Backend();
 import http from 'node:http';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
@@ -73,10 +75,11 @@ const shopPanel = () => ({
 });
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const apiReady = () => Boolean(supabaseUrl && serviceKey);
+const apiReady = () => Boolean(d1Backend.ready() || (supabaseUrl && serviceKey));
 const ephem = (content, components = []) => ({ type: 4, data: { flags: 64, content: String(content).slice(0,1900), components } });
 const row = (...buttons) => ({ type: 1, components: buttons });
 async function db(table, options = {}) {
+  if(d1Backend.ready())return d1Backend.db(table,options);
   if (!apiReady()) throw Error('Supabase server configuration missing');
   const { method = 'GET', query = '', body } = options;
   const res = await fetch(supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + table + query, {
@@ -87,6 +90,7 @@ async function db(table, options = {}) {
   const text = await res.text(); return text ? JSON.parse(text) : [];
 }
 async function rpc(name, payload) {
+  if(d1Backend.ready())return d1Backend.rpc(name,payload);
   if (!apiReady()) throw Error('Supabase not configured');
   const res = await fetch(supabaseUrl.replace(/\/$/,'') + '/rest/v1/rpc/' + name, {
     method: 'POST',
@@ -935,11 +939,13 @@ async function receivePlaceScreenshot(message) {
   const ext=attachment.content_type==='image/jpeg'?'jpg':attachment.content_type==='image/webp'?'webp':attachment.content_type==='image/gif'?'gif':'png';
   const mime=ext==='jpg'?'image/jpeg':'image/'+ext;
   const objectPath=draft.squad_id+'/'+randomUUID()+'.'+ext;
+  if(d1Backend.ready()){imageUrl=await d1Backend.upload(bytes,objectPath.split('/').pop(),'squad-place-images/'+draft.squad_id)}else{
   const storage=await fetch(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/squad-place-images/'+objectPath,{
     method:'POST',headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':mime,'x-upsert':'false'},body:bytes,signal:AbortSignal.timeout(20000)
   });
   if(!storage.ok)throw Error('Screenshot storage '+storage.status+': '+(await storage.text()).slice(0,150));
   imageUrl=supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+objectPath;
+  }
   }
   await db('squad_place_posts',{method:'POST',body:{squad_id:draft.squad_id,kind:draft.kind,images:imageUrl?[imageUrl]:[],comment:stashInfo.name+(stashInfo.coords?'\nКоординаты: '+stashInfo.coords:''),created_by:draft.member_id}});
   await db('discord_place_drafts',{method:'DELETE',query:'?discord_user_id=eq.'+uid});
@@ -1125,6 +1131,7 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
       if (bytes.length>10*1024*1024) continue;
       const ext=p.content_type==='image/jpeg'?'jpg':p.content_type==='image/webp'?'webp':p.content_type==='image/gif'?'gif':'png';
       const key=member.squad_id+'/'+randomUUID()+'.'+ext;
+      if(d1Backend.ready()){images.push(await d1Backend.upload(bytes,key.split('/').pop(),'squad-place-images/'+member.squad_id))}else{
       const uploaded=await fetch(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/squad-place-images/'+key,{
         method:'POST',
         headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':ext==='jpg'?'image/jpeg':'image/'+ext,'x-upsert':'false'},
@@ -1132,6 +1139,7 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
       });
       if (!uploaded.ok) throw Error('storage '+uploaded.status);
       images.push(supabaseUrl.replace(/\/$/,'')+'/storage/v1/object/public/squad-place-images/'+key);
+      }
     } catch(e) {console.error('[discord] Map photo:',e.message);}
   }
   const title=content.replace(/\{[^}]*\}/g,' ').replace(/\b[XYZPR]\s*[:=]\s*-?\d+(?:[.,]\d+)?/gi,' ').replace(/\s+/g,' ').trim().slice(0,140)||'Маркер';
