@@ -1,0 +1,24 @@
+name: Check migrated Discord bot
+on:
+  push:
+    branches: [scum-hub-migration]
+    paths: ['.github/workflows/migration-health.yml']
+  workflow_dispatch:
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check running migration service without restarting it
+        env:
+          SSH_HOST: ${{ secrets.TIMEWEB_HOST }}
+          SSH_USER: ${{ secrets.TIMEWEB_USER }}
+          SSH_KEY: ${{ secrets.TIMEWEB_SSH_KEY }}
+          SSH_PORT: ${{ secrets.TIMEWEB_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/migration_key
+          chmod 600 ~/.ssh/migration_key
+          PORT="${SSH_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status; systemctl show scum-hub-bot -p NRestarts -p ActiveEnterTimestamp; curl -fsS --max-time 30 http://127.0.0.1:3000/health'
