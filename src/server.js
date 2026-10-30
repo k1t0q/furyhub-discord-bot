@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
+let migrationGatewayReady=false;
 const port = Number(process.env.PORT || 3000);
 const publicKey = process.env.DISCORD_PUBLIC_KEY;
 const allowedGuild = process.env.DISCORD_GUILD_ID;
@@ -683,7 +684,7 @@ http.createServer(async (req, res) => {
         fetch('https://api.imagekit.io/v1/files?limit=1',{headers:{Authorization:'Basic '+Buffer.from(process.env.IMAGEKIT_PRIVATE_KEY.trim()+':').toString('base64')},signal:AbortSignal.timeout(10000)})
       ]);
       if(!discord.ok||!imagekit.ok)return json(res,503,{ok:false,backend:'d1',database:'ok',discord:discord.status,imagekit:imagekit.status});
-      return json(res,200,{ok:true,service:'furyhub-discord-bot',backend:'d1',database:'ok',discord:'ok',imagekit:'ok',testMode:process.env.DISCORD_TEST_MODE!=='false',notificationsEnabled:process.env.DISCORD_DM_NOTIFICATIONS==='true'});
+      return json(res,200,{ok:true,service:'furyhub-discord-bot',backend:'d1',database:'ok',discord:'ok',imagekit:'ok',gatewayReady:migrationGatewayReady,notificationScheduleConfigured:Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT||'')),testMode:process.env.DISCORD_TEST_MODE!=='false',notificationsEnabled:process.env.DISCORD_DM_NOTIFICATIONS==='true'});
     } catch { return json(res,503,{ok:false,backend:'d1',database:'unavailable'}); }
   }
   if (req.method !== 'POST' || req.url !== '/interactions') return json(res, 404, { error: 'Not found' });
@@ -1191,7 +1192,7 @@ function startDiscordGateway() {
         socket.send(JSON.stringify({op:2,d:{token:process.env.DISCORD_BOT_TOKEN,intents:37376,properties:{os:'linux',browser:'scum-hub',device:'scum-hub'}}}));
         backoff=3000;
       }
-      if(packet.t==='READY') {
+      if(packet.t==='READY') { migrationGatewayReady=true;
         lastProtectActivity = '';
         clearInterval(activityTimer);
         void publishActivity();
@@ -1207,7 +1208,7 @@ function startDiscordGateway() {
       });
     });
     socket.on('error',err=>console.error('[discord] Gateway:',err.message));
-    socket.on('close',()=>{clearInterval(heartbeat);clearInterval(activityTimer);lastProtectActivity='';setTimeout(connect,backoff).unref();backoff=Math.min(backoff*2,60000);});
+    socket.on('close',()=>{migrationGatewayReady=false;clearInterval(heartbeat);clearInterval(activityTimer);lastProtectActivity='';setTimeout(connect,backoff).unref();backoff=Math.min(backoff*2,60000);});
   };
   connect();
 }
