@@ -1,11 +1,36 @@
-This branch supports D1 + ImageKit without changing main or the running bot.
+# SCUM HUB — итог переноса на 30.10.2026
 
-D1 mode requires CF_ACCOUNT_ID, CF_D1_DATABASE_ID, CF_D1_API_TOKEN (D1 edit, restricted to the migration database), and IMAGEKIT_PRIVATE_KEY. FURYHUB_URL must point to https://scum-hub-migration.nikitinrf.workers.dev/.
+Тестовый сайт: https://scum-hub-migration.nikitinrf.workers.dev/
+Изменения выполнялись в ветках scum-hub-migration. Основные ветки main, прежний сайт и VPN не менялись.
 
-Keep DISCORD_TEST_MODE enabled until a separate test Discord application/guild is configured. Do not run two gateway instances with the production Discord token. Do not invoke the main Timeweb deployment workflow from this branch.
+## Восстановлено
 
-Implemented: D1 database transport, query filters, presence upsert, private link-code consumption, delivery claims, protect updates, alarm receipt/channel jobs, ImageKit photo uploads. The existing Discord handlers and panels use this transport when the D1 environment is configured.
+- Исходный интерфейс сайта подключён к D1 вместо аварийного портала. Исправлена вложенность строк участников в настройках. Владелец подтвердил работу сайта.
+- Состав, профиль, задачи и вклады, рейды, участие, протект, взрывчатка, публикации, схроны и карта используют D1.
+- У ДУБЛЯ сохранены 40 меток, 15 публикаций, 12 записей участников, 2 задачи, 296 записей участия и 8 обновлений протекта. Рейдов в перенесённой копии не было.
+- Инвентаризация ImageKit подтвердила 125 исходных файлов. Пять ссылок в двух публикациях переведены на ImageKit; в публикациях ДУБЛЯ не осталось ссылок Supabase. Новые фото загружаются через сервер и выдаются по подписанным адресам.
+- Браузерные push удалены по указанию владельца.
+- Discord-бот развёрнут на Timeweb из отдельного каталога /opt/scum-hub-bot-migration и подключён к D1/ImageKit. Существующие токен и настройки Discord сохранены; закрытые ключи переданы зашифрованными, в Git и открытые журналы не помещались.
+- Сохранены 9 активных привязок Discord.
+- Восстановлены события задач, рейдов, протекта и публикаций; настроены напоминания об участии в 15:00 МСК, о протекте за 60/15 минут и об истечении схронов за 5/2/1 день и при истечении.
+- Тревога создаёт задание на 5 сообщений @everyone в существующий канал. Личные повторы до кнопки «Принял» отключены по указанию владельца. Старые просроченные задания канала не отправляются.
+- Подготовлены проверка здоровья сервиса, отдельное развёртывание и откат. Конфигурация VPN не изменялась.
 
-Production activation requires coordinating the Discord endpoint/gateway switch. It has deliberately not been performed while the existing site must remain unchanged.
+## Проверено
 
-Verified deployment blocker (2026-10-30): the Timeweb SSH deployment account has only one sudo command, /usr/local/sbin/deploy-scum-hub-bot. That root-owned helper deploys origin/main exclusively. The service runs root-owned /opt/scum-hub-bot on main at b2b04327bd81a35fd30c7941b30b4a9b5566d72b. The deployment account cannot change the service, its environment, or deploy this migration branch. D1 and ImageKit secrets are absent in the bot repository. Root access or an administrator-provided migration deployment helper/separate service is required; do not change main or attempt to circumvent the sudo restriction.
+- 88 автоматических тестов HUB.
+- 4 теста Discord-адаптера и планировщика, включая одноразовую привязку, защиту от повторной обработки, участие без дублей и расписание по Москве.
+- Реальные операции на тестовом Worker в отдельном временном отряде: вход, задачи/вклады/назначение/статусы, участие, рейды и участники, протект, метки и изоляция отрядов.
+- Реальная загрузка изображения, сохранение публикации и скачивание: HTTP 200.
+- Рабочий сервис бота подтвердил backend=d1, database=ok, discord=ok, imagekit=ok, testMode=false, notificationsEnabled=true.
+- После очистки временного отряда у ДУБЛЯ остались все 40 меток; тестовое изображение удалено.
+- При ошибках первых запусков сработал откат; затем бот успешно запущен на современном Node.js.
+
+## Что ещё требует пользовательского прогона
+
+- Нажатия кнопок из настоящего клиента Discord: участие и время, протект, рейды, задачи, добавление схрона/базы с фото.
+- Фактическая доставка обычного сообщения конкретному участнику и срабатывание будущего напоминания в 15:00 МСК. Проверены подключения и логика, но такие сообщения не отправлялись специально ради теста.
+- Массовая тревога намеренно не запускалась для проверки, чтобы не тревожить отряд.
+- Полное визуальное сравнение всех состояний сайта на ПК и телефоне не проводилось.
+
+Перенос работающего бота на D1 выполнен. Последний этап — пользовательская проверка взаимодействий Discord, а не получение новых ключей или настройка сервера.
