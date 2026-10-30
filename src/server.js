@@ -254,8 +254,11 @@ async function processDiscordNotifications() {
     const memberById = new Map(members.map(m=>[m.id,m]));
     const prefById = new Map(prefs.map(p=>[p.member_id,p]));
     for (const event of events.reverse()) {
-      // Suppress routine new-stash posts, but keep important stash expiry reminders.
-      if (event.category === 'stash' && event.title === 'Новое в схроне') { stats.ignoredCategory++; continue; }
+      // Map publication announcements are disabled; expiry reminders stay enabled.
+      const mapPublication = ['base','stash','other'].includes(String(event.category || '').toLowerCase())
+        && (String(event.source_key || '').startsWith('squad-place:')
+          || ['Новая база','Новый схрон','Новое в схроне','Новая метка'].includes(event.title));
+      if (mapPublication) { stats.ignoredCategory++; continue; }
       // Raid alarm DMs are handled by fury_alarm_dm_receipts with acknowledgement and retries.
       // Do not also send the legacy generic notification embed for the same alarm.
       if (event.category === 'alarm') { stats.ignoredCategory++; continue; }
