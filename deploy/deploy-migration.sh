@@ -22,12 +22,37 @@ incoming=json.load(open(sys.argv[1]))
 allowed={'CF_ACCOUNT_ID','CF_D1_DATABASE_ID','CF_D1_API_TOKEN','IMAGEKIT_PRIVATE_KEY','FURYHUB_URL'}
 if set(incoming)!=allowed or not all(isinstance(v,str) and v and '\n' not in v and '\r' not in v for v in incoming.values()):
     raise SystemExit('Invalid migration configuration')
+import re,shlex,pathlib
 pid=subprocess.check_output(['systemctl','show','scum-hub-bot','--property=MainPID','--value']).decode().strip()
 env={}
-for entry in open('/proc/'+pid+'/environ','rb').read().split(b'\0'):
-    if b'=' not in entry: continue
-    k,v=entry.decode().split('=',1)
+def keep(k,v):
     if k.startswith(('DISCORD_','SCUM_MAP_','FURY')) or k=='PORT': env[k]=v
+def process_env(proc):
+    try:
+        for entry in open('/proc/'+proc+'/environ','rb').read().split(b'\0'):
+            if b'=' in entry: keep(*entry.decode().split('=',1))
+        children=pathlib.Path('/proc/'+proc+'/task/'+proc+'/children').read_text().split()
+        for child in children: process_env(child)
+    except (OSError,UnicodeError): pass
+process_env(pid)
+unit_env=subprocess.check_output(['systemctl','show','scum-hub-bot','--property=Environment','--value']).decode()
+for entry in shlex.split(unit_env):
+    if '=' in entry: keep(*entry.split('=',1))
+exec_start=subprocess.check_output(['systemctl','show','scum-hub-bot','--property=ExecStart','--value']).decode()
+paths=['/opt/scum-hub-bot/.env','/etc/scum-hub-bot.env']
+paths+=re.findall(r'--env-file(?:=|\s+)(/[^\s;}"'+"'"+r']+)',exec_start)
+paths+=re.findall(r'(?:source|\.)\s+(/[^\s;}"'+"'"+r']+)',exec_start)
+for path in paths:
+    try:
+        if os.stat(path).st_uid!=0: continue
+        for line in pathlib.Path(path).read_text().splitlines():
+            line=line.strip()
+            if not line or line.startswith('#') or '=' not in line: continue
+            k,v=line.removeprefix('export ').split('=',1)
+            try: parsed=shlex.split(v,comments=True);v=parsed[0] if parsed else ''
+            except ValueError: continue
+            keep(k.strip(),v)
+    except (OSError,UnicodeError): pass
 if not env.get('DISCORD_BOT_TOKEN'): raise SystemExit('Existing Discord token unavailable; no changes made')
 env.update(incoming)
 with open(sys.argv[2]+'.new','w') as output:
