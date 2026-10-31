@@ -58,7 +58,7 @@ namespace ScumPositionProbe {
    hubLogin.SetBounds(20,682,170,34);hubLogin.Text="Подключить HUB";StyleButton(hubLogin);hubLogin.Click+=async delegate{await LoginHub();};Controls.Add(hubLogin);
    Button logout=new Button();logout.SetBounds(200,682,110,34);logout.Text="Отключить";StyleButton(logout);logout.Click+=delegate{DisconnectHub();};Controls.Add(logout);
    hubState.SetBounds(20,722,550,40);hubState.Text="Вводи код здесь, не присылай его в чат. Код не сохраняется.";Controls.Add(hubState);
-   Button show=new Button();show.SetBounds(20,770,170,34);show.Text="Карта · F6";StyleButton(show);show.Click+=delegate{ToggleMini();};Controls.Add(show);
+   Button show=new Button();show.SetBounds(20,770,170,34);show.Text="Карта · F7";StyleButton(show);show.Click+=delegate{ToggleMini();};Controls.Add(show);
    Button locked=new Button();locked.SetBounds(200,770,170,34);locked.Text="Сквозь клики · F7";StyleButton(locked);locked.Click+=delegate{mini.ToggleLock();};Controls.Add(locked);
    Button north=new Button();north.SetBounds(380,770,190,34);north.Text="Смотрю на север · F11";StyleButton(north);north.Click+=delegate{CalibrateNorth();};Controls.Add(north);
    hubTimer.Interval=5000;hubTimer.Tick+=async delegate{await RefreshHub();};hubTimer.Start();
@@ -70,7 +70,7 @@ namespace ScumPositionProbe {
   async System.Threading.Tasks.Task LoginHub(){
    if(String.IsNullOrWhiteSpace(hubCode.Text)){hubState.Text="Введи код входа HUB.";return;}
    int version=++hubGeneration;HubClient attempt=new HubClient();hubLogin.Enabled=false;hubState.Text="Подключаюсь к scum-hub.ru…";
-   try{await attempt.Login(hubNick.Text.Trim(),Convert.ToString(hubRole.SelectedItem),hubCode.Text,adminLogin.Checked);HubSnapshot snapshot=await attempt.Snapshot();
+   try{await attempt.Login(hubNick.Text.Trim(),null,hubCode.Text,String.Equals(hubNick.Text.Trim(),"k1t0",StringComparison.OrdinalIgnoreCase));HubSnapshot snapshot=await attempt.Snapshot();
     if(IsDisposed||version!=hubGeneration){attempt.Dispose();return;}if(hub!=null)hub.Dispose();hub=attempt;mini.Markers=snapshot.Markers;mini.LastMarkers=DateTime.UtcNow;mini.SyncEnabled=true;mini.SyncStatus="HUB · "+snapshot.Markers.Count+" меток";hubState.Text="Подключён: "+snapshot.Nick+" · "+snapshot.Markers.Count+" меток";
    }catch(Exception ex){attempt.Dispose();if(!IsDisposed&&version==hubGeneration)hubState.Text=ex.Message;}finally{if(!IsDisposed){hubCode.Clear();hubLogin.Enabled=true;}}
   }
@@ -86,11 +86,14 @@ namespace ScumPositionProbe {
   readonly Label state=new Label(),positionLabel=new Label(),metrics=new Label(),foregroundLabel=new Label();
   readonly Button toggle=new Button();readonly NumericUpDown interval=new NumericUpDown();readonly ComboBox mode=new ComboBox();
   readonly CheckBox top=new CheckBox();
+  ushort copyKey=0x79;readonly Button keyPicker=new Button();bool movingWindow;
   bool running,ctrlOwned,keyOwned,hotkeysOk;long nextUi,nextFocus;uint cachedPid;IntPtr cachedWindow;bool cachedActive;ushort ownedKey;int phase;uint oldSequence,gamePid;
   IntPtr gameWindow=IntPtr.Zero;long nextAttempt,keyUpAt,clipboardUntil,lastSuccess=-1,focusSince=-1;
   int attempts,successes,changes,timeouts,blocked;Position previous;StreamWriter log;string logPath="";
   public ProbeForm(){
-   Text="SCUM HUB · Миникарта v0.4.4";ClientSize=new Size(1010,820);MinimumSize=new Size(1026,859);AutoScroll=false;AutoScaleMode=AutoScaleMode.Dpi;
+   Text="SCUM HUB";ClientSize=new Size(1010,820);MinimumSize=new Size(1026,859);AutoScroll=false;AutoScaleMode=AutoScaleMode.Dpi;
+   DoubleBuffered=true;SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
+   using(Stream icon=typeof(ProbeForm).Assembly.GetManifestResourceStream("ScumPositionProbe.SH.ico")){if(icon!=null)Icon=new Icon(icon);}
    BackColor=Color.FromArgb(12,17,20);ForeColor=Color.FromArgb(235,239,239);Font=new Font("Segoe UI",10);
    MakeLabel("SCUM HUB · MINIMAP",20,15,550,35,17,true);
    MakeLabel("Без Ctrl · позиция из буфера / метки HUB: 5 секунд",20,54,550,25,10,false);
@@ -98,31 +101,66 @@ namespace ScumPositionProbe {
    positionLabel.SetBounds(20,142,550,115);positionLabel.Font=new Font("Consolas",22,FontStyle.Bold);positionLabel.Text="X  —\r\nY  —\r\nZ  —";Controls.Add(positionLabel);
    foregroundLabel.SetBounds(20,267,550,26);Controls.Add(foregroundLabel);
    metrics.SetBounds(20,297,550,58);Controls.Add(metrics);
-   MakeLabel("Интервал, мс",20,365,125,25,10,false);interval.SetBounds(147,362,100,28);interval.Minimum=100;interval.Maximum=5000;interval.Increment=100;interval.Value=1000;Controls.Add(interval);
+   MakeLabel("Интервал, мс",20,365,125,25,10,false);interval.SetBounds(147,362,100,28);interval.Minimum=100;interval.Maximum=5000;interval.Increment=100;interval.Value=100;Controls.Add(interval);
    MakeLabel("Копирование",265,365,100,25,10,false);mode.SetBounds(365,362,205,28);mode.DropDownStyle=ComboBoxStyle.DropDownList;mode.Items.Add("Без нажатий (буфер)");mode.Items.Add("F10 (если назначена в игре)");mode.SelectedIndex=0;Controls.Add(mode);
    toggle.SetBounds(20,408,170,42);toggle.Text="Старт · F8";StyleButton(toggle);toggle.Click+=delegate{Toggle();};Controls.Add(toggle);
    Button stop=new Button();stop.SetBounds(200,408,170,42);stop.Text="Стоп · F9";StyleButton(stop);stop.Click+=delegate{Stop("Остановлено.");};Controls.Add(stop);
    Button logs=new Button();logs.SetBounds(380,408,190,42);logs.Text="Открыть журнал";StyleButton(logs);logs.Click+=delegate{OpenLogs();};Controls.Add(logs);
    top.SetBounds(20,466,550,25);top.Text="Поверх остальных окон";top.Checked=false;TopMost=false;top.CheckedChanged+=delegate{TopMost=top.Checked;};Controls.Add(top);
    MakeLabel("Координаты остаются на ПК. HUB подключается только для чтения меток.\r\nБуфер заменяется координатами; закрой чат и меню игры.",20,504,550,50,9,false);
-   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();
+   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();
    timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();hubTimer.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
+  }
+  void Place(Control c,int x,int y,int w,int h){c.SetBounds(x,y,w,h);c.Visible=true;}
+  void MinimalLayout(){
+   ClientSize=new Size(700,600);MinimumSize=MaximumSize=new Size(716,639);AutoScroll=false;
+   foreach(Control c in Controls)c.Visible=false;
+   MakeLabel("SCUM HUB",24,20,400,38,21,true);
+   MakeLabel("Миникарта",26,61,400,24,10,false);
+   MakeLabel("ПОДКЛЮЧЕНИЕ",24,108,320,24,10,true);
+   MakeLabel("Ник",24,143,145,20,9,false);
+   Place(hubNick,24,167,311,29);
+   MakeLabel("Код HUB",24,207,310,20,9,false);Place(hubCode,24,230,311,29);
+   
+   Place(hubLogin,24,308,192,36);
+   Place(hubState,24,355,311,43);hubState.Font=new Font("Segoe UI",9);hubState.Text="Введи код своего аккаунта HUB.";
+   MakeLabel("ОТСЛЕЖИВАНИЕ",24,416,320,24,10,true);
+   Place(mode,24,451,311,29);
+   Place(toggle,24,496,150,40);Place(state,24,548,650,38);state.Font=new Font("Segoe UI",9);
+   MakeLabel("КАРТА",385,108,290,24,10,true);
+   MakeLabel("Положение X / Y",385,143,280,22,9,false);Place(mapX,385,167,130,29);Place(mapY,535,167,130,29);
+   MakeLabel("Размер",385,211,280,22,9,false);Place(mapSize,385,235,280,29);
+   foreach(Control c in Controls){if(c is ComboBox&&c!=mode&&c!=hubRole){Place(c,385,308,280,29);}}
+   MakeLabel("Непрозрачность",385,284,280,22,9,false);
+   foreach(Control c in Controls){if(!(c is Button))continue;switch(c.Text){
+    case "Отключить":Place(c,228,308,107,36);break;
+    case "Карта · F7":c.Text="Показать / скрыть карту · F7";Place(c,385,365,280,36);break;
+    case "Вернуть карту на экран":c.Text="Сбросить положение";Place(c,385,414,280,36);break;
+    case "Смотрю на север · F11":c.Text="Настроить север · F11";Place(c,385,463,280,36);break;
+    case "Стоп · F9":Place(c,185,496,150,40);break;
+   }}
+  }
+  void BuildKeyPicker(){
+   try{int key;if(Int32.TryParse(File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"copy-key.txt")),out key)&&KeyCapture.Allowed((Keys)key))copyKey=(ushort)key;}catch{}
+   mode.Items[0]="Вручную";mode.Items[1]="Автоматически";mode.Width=155;
+   keyPicker.SetBounds(190,451,145,29);keyPicker.Text="Клавиша: "+((Keys)copyKey).ToString();StyleButton(keyPicker);
+   keyPicker.Click+=delegate{using(KeyCapture dialog=new KeyCapture()){if(dialog.ShowDialog(this)!=DialogResult.OK)return;copyKey=(ushort)dialog.Selected;keyPicker.Text="Клавиша: "+dialog.Selected;try{File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"copy-key.txt"),copyKey.ToString());}catch{}}};Controls.Add(keyPicker);
   }
   Label MakeLabel(string text,int x,int y,int w,int h,int size,bool bold){Label l=new Label();l.Text=text;l.SetBounds(x,y,w,h);l.Font=new Font("Segoe UI",size,bold?FontStyle.Bold:FontStyle.Regular);Controls.Add(l);return l;}
   void StyleButton(Button b){b.FlatStyle=FlatStyle.Flat;b.BackColor=Color.FromArgb(34,46,52);b.ForeColor=ForeColor;}
-  protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);Native.AddClipboardFormatListener(Handle);bool a=Native.RegisterHotKey(Handle,1,0x4000,0x77),b=Native.RegisterHotKey(Handle,2,0x4000,0x78);Native.RegisterHotKey(Handle,3,0x4000,0x75);Native.RegisterHotKey(Handle,4,0x4000,0x76);Native.RegisterHotKey(Handle,5,0x4000,0x7A);hotkeysOk=a&&b;if(!hotkeysOk){Native.UnregisterHotKey(Handle,1);Native.UnregisterHotKey(Handle,2);state.Text="F8/F9 заняты. Закрой программу, освободившую клавиши, и запусти снова.";}}
-  protected override void WndProc(ref Message m){if(m.Msg==0x031D&&running){uint pid;IntPtr win;if(IsGame(out pid,out win)){ReadClipboard();}}if(m.Msg==0x0231){ReleaseKeys();phase=0;timer.Stop();}if(m.Msg==0x0232){timer.Start();}if(m.Msg==0x0312){if(m.WParam.ToInt32()==1)Toggle();if(m.WParam.ToInt32()==2)Stop("Остановлено по F9.");if(m.WParam.ToInt32()==3)ToggleMini();if(m.WParam.ToInt32()==4)mini.ToggleLock();if(m.WParam.ToInt32()==5)CalibrateNorth();}base.WndProc(ref m);}
+  protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);Native.AddClipboardFormatListener(Handle);bool a=Native.RegisterHotKey(Handle,1,0x4000,0x77),b=Native.RegisterHotKey(Handle,2,0x4000,0x78);Native.RegisterHotKey(Handle,3,0x4000,0x76);Native.RegisterHotKey(Handle,5,0x4000,0x7A);hotkeysOk=a&&b;if(!hotkeysOk){Native.UnregisterHotKey(Handle,1);Native.UnregisterHotKey(Handle,2);state.Text="F8/F9 заняты. Закрой программу, освободившую клавиши, и запусти снова.";}}
+  protected override void WndProc(ref Message m){if(m.Msg==0x031D&&running&&!movingWindow){uint pid;IntPtr win;if(IsGame(out pid,out win)){ReadClipboard();}}if(m.Msg==0x0231){movingWindow=true;mini.PausePainting(true);ReleaseKeys();phase=0;timer.Stop();hubTimer.Stop();}if(m.Msg==0x0232){movingWindow=false;mini.PausePainting(false);timer.Start();hubTimer.Start();}if(m.Msg==0x0312){if(m.WParam.ToInt32()==1)Toggle();if(m.WParam.ToInt32()==2)Stop("Остановлено по F9.");if(m.WParam.ToInt32()==3)ToggleMini();if(m.WParam.ToInt32()==5)CalibrateNorth();}base.WndProc(ref m);}
   void Toggle(){if(running){Stop("Остановлено по F8.");return;}if(!hotkeysOk){MessageBox.Show(this,"Не удалось зарегистрировать F8/F9. Автоматический режим не включён.");return;}
-   if(mode.SelectedIndex==1&&MessageBox.Show(this,"Ты уже назначил в SCUM действие «Копировать местоположение» на F10? Иначе этот режим не получит координаты.","Проверка назначения",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
+   if(mode.SelectedIndex==1&&MessageBox.Show(this,"Ты уже назначил в SCUM действие «Копировать местоположение» на выбранную клавишу? Иначе этот режим не получит координаты.","Проверка назначения",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
    try{string dir=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logs");Directory.CreateDirectory(dir);logPath=Path.Combine(dir,"positions_"+DateTime.Now.ToString("yyyyMMdd_HHmmss_fff")+".csv");log=new StreamWriter(logPath,false,new UTF8Encoding(true));log.WriteLine("timestamp_utc,x,y,z,yaw,changed");log.Flush();}catch(Exception ex){MessageBox.Show(this,"Не удалось создать журнал: "+ex.Message);return;}
-   attempts=successes=changes=timeouts=blocked=0;previous=null;lastSuccess=-1;focusSince=-1;phase=0;oldSequence=Native.GetClipboardSequenceNumber();running=true;interval.Enabled=mode.Enabled=false;toggle.Text="Пауза · F8";state.Text=mode.SelectedIndex==0?"Без нажатий: жду новые координаты в буфере из SCUM.":"F10: переключись в SCUM; запросы через 2 секунды.";nextAttempt=clock.ElapsedMilliseconds+2000;
+   attempts=successes=changes=timeouts=blocked=0;previous=null;lastSuccess=-1;focusSince=-1;phase=0;oldSequence=Native.GetClipboardSequenceNumber();running=true;keyPicker.Enabled=interval.Enabled=mode.Enabled=false;toggle.Text="Пауза · F8";state.Text=mode.SelectedIndex==0?"Без нажатий: жду новые координаты в буфере из SCUM.":"Переключись в SCUM; запросы начнутся через 2 секунды.";nextAttempt=clock.ElapsedMilliseconds+2000;
   }
-  void Stop(string reason){mini.MotionStatus="Остановлено";running=false;ReleaseKeys();phase=0;focusSince=-1;interval.Enabled=mode.Enabled=true;toggle.Text="Старт · F8";if(log!=null){log.Dispose();log=null;}state.Text=reason;}
+  void Stop(string reason){mini.MotionStatus="Остановлено";running=false;ReleaseKeys();phase=0;focusSince=-1;keyPicker.Enabled=interval.Enabled=mode.Enabled=true;toggle.Text="Старт · F8";if(log!=null){log.Dispose();log=null;}state.Text=reason;}
   bool IsGame(out uint pid,out IntPtr window){window=Native.GetForegroundWindow();Native.GetWindowThreadProcessId(window,out pid);if(pid==0)return false;try{using(Process p=Process.GetProcessById((int)pid)){return Native.IsScumName(p.ProcessName);}}catch{return false;}}
-  bool InputBusy(){int[] keys={0x10,0x11,0x12,0x5B,0x5C,0x01,0x02,0x43,0x79};foreach(int k in keys)if(Native.Down(k))return true;return false;}
+  bool InputBusy(){int[] keys={0x10,0x11,0x12,0x5B,0x5C,0x01,0x02,copyKey};foreach(int k in keys)if(Native.Down(k))return true;return false;}
   void ReleaseKeys(){List<Native.INPUT> keys=new List<Native.INPUT>();if(keyOwned)keys.Add(Native.Key(ownedKey,true));if(ctrlOwned)keys.Add(Native.Key(0x11,true));if(keys.Count>0)Native.Send(keys.ToArray());keyOwned=ctrlOwned=false;}
   void Tick(){
-   long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
+   long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(!movingWindow&&now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
    metrics.Text="Попытки: "+attempts+"   Получено: "+successes+"   Изменений: "+changes+"   Нет ответа: "+timeouts+"\r\nПоследние координаты: "+(lastSuccess<0?"ещё не получены":((now-lastSuccess)/1000.0).ToString("0.0")+" с назад")+"   Пропуски ввода: "+blocked;
    }
    if(!running)return;
@@ -135,9 +173,9 @@ namespace ScumPositionProbe {
     }if(now>=clipboardUntil){timeouts++;phase=0;state.Text="Нет свежих координат. Проверь назначение клавиш и закрой чат/меню.";}return;}
    if(now<nextAttempt)return;if(InputBusy()){blocked++;nextAttempt=now+150;state.Text="Жду отпускания Shift / Ctrl / Alt / мыши.";return;}
    if(!IsGame(out pid,out window))return;
-   gamePid=pid;gameWindow=window;oldSequence=Native.GetClipboardSequenceNumber();ownedKey=0x79;
+   gamePid=pid;gameWindow=window;oldSequence=Native.GetClipboardSequenceNumber();ownedKey=copyKey;
    List<Native.INPUT> down=new List<Native.INPUT>();down.Add(Native.Key(ownedKey,false));keyOwned=true;
-   attempts++;nextAttempt=now+(long)interval.Value;
+   attempts++;nextAttempt=now+100;
    if(!Native.Send(down.ToArray())){ReleaseKeys();Stop("Windows отклонила ввод. Режим остановлен.");return;}
    phase=1;keyUpAt=now+45;state.Text="Запрос координат… F9 — остановить.";
   }
