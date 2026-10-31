@@ -14,3 +14,11 @@ with ThreadPoolExecutor(max_workers=6) as pool:
  for x,y,im in pool.map(load,[(x,y) for y in range(4) for x in range(4)]):
   assert im.size==(1280,1280),im.size;out.paste(im,(x*1280,y*1280))
 out.save(root/'map.jpg',quality=91,optimize=True);print('HD map assembled',out.size,(root/'map.jpg').stat().st_size)
+
+from PIL import ImageDraw,ImageFont
+icon=Image.new('RGBA',(256,256),(0,0,0,0));draw=ImageDraw.Draw(icon)
+draw.rounded_rectangle((3,3,253,253),radius=48,fill='#e64046')
+font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',125)
+box=draw.textbbox((0,0),'SH',font=font)
+draw.text(((256-(box[2]-box[0]))/2,(256-(box[3]-box[1]))/2-box[1]),'SH',font=font,fill='#101517')
+icon.save(root/'SH.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
