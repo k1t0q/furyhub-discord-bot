@@ -1,3 +1,4 @@
+import {warehousePanel, warehouseModal, saveWarehouse} from './warehouse.js';
 import {queueMigrationReminders} from './migration-reminders.js';
 import {createD1Backend} from './d1-backend.js';
 const d1Backend=createD1Backend();
@@ -41,7 +42,7 @@ const panel = (publicPost = false) => ({
         { label: 'Протект', value: 'fury:protect', description: 'Время и обновление протекта', emoji: { name: '🛡️' } },
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
-        { label: 'Взрыв', value: 'fury:explosives', description: 'Запасы взрывчатки', emoji: { name: '💥' } }
+        { label: 'Склад', value: 'fury:explosives', description: 'Запасы и редактирование взрывчатки', emoji: { name: '📦' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
@@ -534,6 +535,13 @@ async function handle(interaction) {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
     return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить время обновления',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время обновления (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
   }
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stock:choose') {
+    if(process.env.DISCORD_TEST_MODE !== 'false')return ephem('Тестовый режим: изменение склада отключено.');
+    return warehouseModal(interaction.data?.values?.[0]);
+  }
+  if (interaction.type === 5 && String(interaction.data?.custom_id||'').startsWith('fury:stock:save:')) {
+    return saveWarehouse(interaction,{db,linked,homepage,testMode:process.env.DISCORD_TEST_MODE !== 'false'});
+  }
   const customId=String(interaction.data?.custom_id||'');
   if (interaction.type === 5 && customId === 'fury:protect:set-start') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
@@ -620,16 +628,7 @@ async function handle(interaction) {
     }).join('\n\n');
     return ephem('**Активные задачи**\n\n'+(description||'Нет задач.'),[row({type:2,style:5,label:'ПЕРЕЙТИ К ЗАДАЧАМ ↗',url:homepage.replace(/\/$/,'')+'/?section=tasks'})]);
   }
-  if (section==='explosives') {
-    const items=await db('explosives_inventory',{query:squad+'&select=item,quantity'});
-    const order=['С4','РПГ','ГРАНАТА','ДИНАМИТ','ПАЙПА','40'];
-    const stock=new Map(items.map(x=>[x.item==='C4'?'С4':x.item==='Граната'?'ГРАНАТА':x.item,Number(x.quantity||0)]));
-    const lines=order.map(name=>'**'+name+':** '+(stock.get(name)||0));
-    const damage=(stock.get('С4')||0)*400+(stock.get('РПГ')||0)*200+(stock.get('ГРАНАТА')||0)*100+(stock.get('ДИНАМИТ')||0)*200;
-    const walls=Math.floor(damage/1200);
-    const word=(n)=>{const m=n%100,a=n%10;return m>=11&&m<=14?'СТЕН':a===1?'СТЕНУ':a>=2&&a<=4?'СТЕНЫ':'СТЕН';};
-    return ephem('**ВЗРЫВ · ЗАПАСЫ**\n'+lines.join('\n')+'\n\nМОЖНО ВЗОРВАТЬ **'+walls+' '+word(walls)+'**',[row({type:2,style:5,label:'ПЕРЕЙТИ К ВЗРЫВУ ↗',url:homepage.replace(/\/$/,'')+'/?section=explosives'})]);
-  }
+  if (section==='explosives') return warehousePanel(db,m,homepage);
   if (section==='alarm') {
     if(action==='confirm') {
       const sent = await rpc('raise_discord_raid_alarm',{p_discord_user_id:interaction.member?.user?.id || interaction.user?.id});
@@ -796,8 +795,8 @@ http.createServer(async (req, res) => {
       })();
       return;
     }
-    const isDeferred = (interaction.type === 5 && (['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
-      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
+    const isDeferred = (interaction.type === 5 && (String(interaction.data?.custom_id||'').startsWith('fury:stock:save:') || ['fury:protect:set-start','fury:presence:save-time'].includes(interaction.data?.custom_id) || /^fury:place-title:(stash|base)$/.test(interaction.data?.custom_id||''))) ||
+      (interaction.type === InteractionType.MESSAGE_COMPONENT && !['fury:stock:choose','fury:protect:set-start','fury:presence:Буду','fury:presence:change-time','fury:place-cancel'].includes(interaction.data?.custom_id)) ||
       (interaction.type === InteractionType.APPLICATION_COMMAND && ['link', 'status', 'shop', 'setup'].includes(interaction.data?.name)) || (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:clear:confirm');
     if (!isDeferred) {
       const reply = await handle(interaction);
