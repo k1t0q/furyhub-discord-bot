@@ -674,6 +674,25 @@ async function registerGuildCommand() {
     console.error('[discord] /fury registration request failed', error?.message || 'Unknown error');
   }
 }
+
+async function refreshDownloadMenus(){
+ try{
+  if(!allowedGuild||!process.env.DISCORD_BOT_TOKEN)return;
+  const headers={Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN};
+  const me=await fetch('https://discord.com/api/v10/users/@me',{headers}).then(r=>r.json());
+  const channels=await fetch('https://discord.com/api/v10/guilds/'+allowedGuild+'/channels',{headers}).then(r=>r.json());
+  for(const c of Array.isArray(channels)?channels:[]){
+   if(c.name!=='scum-hub')continue;
+   const messages=await fetch('https://discord.com/api/v10/channels/'+c.id+'/messages?limit=100',{headers}).then(r=>r.json());
+   for(const m of Array.isArray(messages)?messages:[]){
+    if(m.author?.id!==me.id||!m.components?.some(r=>r.components?.some(x=>x.custom_id==='fury:menu')))continue;
+    const r=await fetch('https://discord.com/api/v10/channels/'+c.id+'/messages/'+m.id,{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({components:panel(true).data.components})});
+    console.log('[minimap] existing panel update',r.status);
+   }
+  }
+ }catch(e){console.error('[minimap] panel refresh',e.message);}
+}
+
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/banner.png') {
     try {
@@ -841,6 +860,7 @@ http.createServer(async (req, res) => {
   console.log('FURY HUB Discord interactions listening on port', port);
   void registerGuildCommand();
   void registerGlobalClear();
+  void refreshDownloadMenus();
 });
 
 if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && process.env.DISCORD_DM_START_AT && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT))) {
