@@ -18,7 +18,7 @@ namespace ScumPositionProbe {
   public HubClient():this(Handler()){}
   internal HubClient(HttpMessageHandler handler){ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;client=new HttpClient(handler);client.BaseAddress=new Uri("https://scum-hub.ru/");client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Add("Origin","https://scum-hub.ru");client.DefaultRequestHeaders.Add("Accept","application/json");}
   public async Task Login(string nick,string role,string code,bool admin){
-   Dictionary<string,object> body=new Dictionary<string,object>();body["code"]=code;if(!admin){body["nick"]=nick;body["role"]=role;}
+   Dictionary<string,object> body=new Dictionary<string,object>();body["code"]=code;if(!admin){body["nick"]=nick;if(!String.IsNullOrEmpty(role))body["role"]=role;}
    using(HttpResponseMessage r=await client.PostAsync(admin?"api/admin/login":"api/member/login",new StringContent(json.Serialize(body),Encoding.UTF8,"application/json"))){
     if((int)r.StatusCode==429)throw new Exception("Слишком много попыток. Подожди перед повторным входом.");
     if(!r.IsSuccessStatusCode)throw new Exception("Вход не выполнен (HTTP "+(int)r.StatusCode+"). Проверь код, роль и режим входа.");
