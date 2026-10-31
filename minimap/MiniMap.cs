@@ -39,6 +39,7 @@ namespace ScumPositionProbe {
    MouseMove+=delegate(object sender,MouseEventArgs e){if(dragging&&e.Button==MouseButtons.Left)Location=new Point(Left+e.X-drag.X,Top+e.Y-drag.Y);};MouseUp+=delegate{dragging=false;Capture=false;};MouseCaptureChanged+=delegate{if(!Capture)dragging=false;};
    FormClosing+=delegate(object sender,FormClosingEventArgs e){if(e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();return;}animation.Stop();if(map!=null)map.Dispose();};
   }
+  public void PausePainting(bool pause){if(pause)animation.Stop();else if(Visible)animation.Start();}
   public void ToggleLock(){Locked=!Locked;if(IsHandleCreated){int ex=GetWindowLong(Handle,-20);SetWindowLong(Handle,-20,Locked?ex|0x20|0x08000000:(ex&~0x20)|0x08000000);}Invalidate();}
   public void SetPosition(Position p){Current=p;LastPosition=DateTime.UtcNow;{renderedX=MapMath.NormX(p.X);renderedY=MapMath.NormY(p.Y);renderedHeading=p.HasYaw?MapMath.NormalizeAngle(p.Yaw-NorthYaw):0;}Invalidate();if(Visible)Update();}
   protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);Graphics g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;g.InterpolationMode=InterpolationMode.HighQualityBilinear;
