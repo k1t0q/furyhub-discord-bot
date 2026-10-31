@@ -5,7 +5,9 @@ const d1Backend=createD1Backend();
 import http from 'node:http';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, copyFileSync } from 'node:fs';
+const minimapPath=new URL('../minimap/SCUM_HUB_MiniMap.exe',import.meta.url);
+try{copyFileSync('/tmp/SCUM_HUB_MiniMap.exe',minimapPath);}catch{}
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
 import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -364,7 +366,7 @@ async function registerGlobalClear(){
 }
 async function handle(interaction) {
   if(interaction.type===InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:menu' && interaction.data?.values?.[0]==='fury:minimap'){
-    try{const file=readFileSync('/tmp/SCUM_HUB_MiniMap.exe');if(file.length<100000||file[0]!==77||file[1]!==90)throw Error('Invalid executable');const reply=ephem('🗺️ **Миникарта SCUM HUB · Windows**\nСкачай файл ниже и запусти. Карта встроена, установка не нужна.\nВход — своим кодом HUB. F8 — старт, F9 — стоп, F7 — перемещение карты.');reply.data.minimapFile=file;return reply;}catch{return ephem('Файл миникарты временно недоступен. Сообщи администратору.');}
+    try{const file=readFileSync(minimapPath);if(file.length<100000||file[0]!==77||file[1]!==90)throw Error('Invalid executable');const reply=ephem('🗺️ **Миникарта SCUM HUB · Windows**\nСкачай файл ниже и запусти. Карта встроена, установка не нужна.\nВход — своим кодом HUB. F8 — старт, F9 — стоп, F7 — перемещение карты.');reply.data.minimapFile=file;return reply;}catch{return ephem('Файл миникарты временно недоступен. Сообщи администратору.');}
   }
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if(interaction.type===InteractionType.APPLICATION_COMMAND&&interaction.data?.name==='clear'){
