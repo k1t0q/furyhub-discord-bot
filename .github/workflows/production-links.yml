@@ -16,9 +16,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil
+          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil fonts-dejavu-core
           python3 minimap/build-map.py
-          mcs -target:winexe -out:minimap/SCUM_HUB_MiniMap.exe -resource:minimap/map.jpg,ScumPositionProbe.map.jpg -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Web.Extensions.dll -r:System.Net.Http.dll minimap/PositionProbe.cs minimap/HubClient.cs minimap/MiniMap.cs minimap/MarkerMergeTests.cs
+          mcs -target:winexe -out:minimap/SCUM_HUB_MiniMap.exe -win32icon:minimap/SH.ico -resource:minimap/SH.ico,ScumPositionProbe.SH.ico -resource:minimap/map.jpg,ScumPositionProbe.map.jpg -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Web.Extensions.dll -r:System.Net.Http.dll minimap/PositionProbe.cs minimap/HubClient.cs minimap/MiniMap.cs minimap/MarkerMergeTests.cs minimap/KeyCapture.cs
           mono minimap/SCUM_HUB_MiniMap.exe --self-test
           cat minimap/self-test.txt
           node --check src/server.js
