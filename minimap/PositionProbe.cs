@@ -10,6 +10,9 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace ScumPositionProbe {
+ public static class UserSettings {
+  public static string PathFor(string name){string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"SCUM HUB");Directory.CreateDirectory(root);string path=Path.Combine(root,name);string old=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,name);if(!File.Exists(path)&&File.Exists(old))File.Copy(old,path,false);return path;}
+ }
  public sealed class Position {
   public double X,Y,Z,Yaw;public bool HasYaw;
   public static readonly Regex Pattern=new Regex(@"^\s*\{?\s*X\s*=\s*([+\-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+\-]?\d+)?)\s+Y\s*=\s*([+\-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+\-]?\d+)?)\s+Z\s*=\s*([+\-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+\-]?\d+)?)(?:\s*\|[^\r\n{}]*)?\s*\}?\s*$",RegexOptions.CultureInvariant);
@@ -26,6 +29,9 @@ namespace ScumPositionProbe {
   public string Display(){return "X  "+Number(X)+"\r\nY  "+Number(Y)+"\r\nZ  "+Number(Z);}
  }
  public static class Native {
+  [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO {public int cbSize;public int flags;public IntPtr hCursor;public int x,y;}
+  [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO info);
+  public static bool CursorVisible(){CURSORINFO info=new CURSORINFO();info.cbSize=Marshal.SizeOf(typeof(CURSORINFO));return GetCursorInfo(ref info)&&(info.flags&1)!=0;}
   [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public INPUTUNION u; }
   [StructLayout(LayoutKind.Explicit)] public struct INPUTUNION { [FieldOffset(0)] public KEYBDINPUT ki; [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public HARDWAREINPUT hi; }
   [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT {public ushort wVk,wScan;public uint dwFlags,time;public UIntPtr dwExtraInfo;}
@@ -64,9 +70,12 @@ namespace ScumPositionProbe {
    hubTimer.Interval=5000;hubTimer.Tick+=async delegate{await RefreshHub();};hubTimer.Start();
    LoadCalibration();Shown+=delegate{mini.Show();};
   }
-  void LoadCalibration(){try{string f=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"north.txt");double v;if(File.Exists(f)&&Double.TryParse(File.ReadAllText(f),NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&!Double.IsInfinity(v)&&!Double.IsNaN(v)){mini.NorthYaw=MapMath.NormalizeAngle(v);mini.NorthCalibrated=true;}}catch{}}
-  void CalibrateNorth(){if(previous==null||!previous.HasYaw||lastSuccess<0||clock.ElapsedMilliseconds-lastSuccess>4000){state.Text="Для калибровки нужны свежие координаты с углом Yaw. Смотри на север и нажми F11 в игре.";return;}mini.NorthYaw=previous.Yaw;mini.NorthCalibrated=true;try{File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"north.txt"),previous.Yaw.ToString(CultureInfo.InvariantCulture));}catch{}state.Text="Север откалиброван по текущему направлению.";}
-  void ToggleMini(){if(mini.Visible)mini.Hide();else mini.Show();}
+  void LoadCalibration(){try{string f=UserSettings.PathFor("north.txt");double v;if(File.Exists(f)&&Double.TryParse(File.ReadAllText(f),NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&!Double.IsInfinity(v)&&!Double.IsNaN(v)){mini.NorthYaw=MapMath.NormalizeAngle(v);mini.NorthCalibrated=true;}}catch{}}
+  void CalibrateNorth(){if(previous==null||!previous.HasYaw||lastSuccess<0||clock.ElapsedMilliseconds-lastSuccess>4000){state.Text="Для калибровки нужны свежие координаты с углом Yaw. Смотри на север и нажми F11 в игре.";return;}mini.NorthYaw=previous.Yaw;mini.NorthCalibrated=true;try{File.WriteAllText(UserSettings.PathFor("north.txt"),previous.Yaw.ToString(CultureInfo.InvariantCulture));}catch{}state.Text="Север откалиброван по текущему направлению.";}
+  bool mapWanted=true,menuCursor,autoHidden;long cursorChangedAt;bool lastCursor;readonly CheckBox autoHide=new CheckBox();
+  void ToggleMini(){mapWanted=!mapWanted;ApplyVisibility();}
+  void ApplyVisibility(){bool show=mapWanted&&!autoHidden;if(show&&!mini.Visible)mini.Show();else if(!show&&mini.Visible)mini.Hide();}
+  void UpdateMenuVisibility(bool active,long now){bool visible=active&&autoHide.Checked&&Native.CursorVisible();menuCursor=visible;if(visible!=lastCursor){lastCursor=visible;cursorChangedAt=now;}if(visible){ReleaseKeys();phase=0;nextAttempt=now+200;}if(now-cursorChangedAt>=(visible?100:180)){autoHidden=visible;ApplyVisibility();}}
   async System.Threading.Tasks.Task LoginHub(){
    if(String.IsNullOrWhiteSpace(hubCode.Text)){hubState.Text="Введи код входа HUB.";return;}
    int version=++hubGeneration;HubClient attempt=new HubClient();hubLogin.Enabled=false;hubState.Text="Подключаюсь к scum-hub.ru…";
@@ -108,8 +117,8 @@ namespace ScumPositionProbe {
    Button logs=new Button();logs.SetBounds(380,408,190,42);logs.Text="Открыть журнал";StyleButton(logs);logs.Click+=delegate{OpenLogs();};Controls.Add(logs);
    top.SetBounds(20,466,550,25);top.Text="Поверх остальных окон";top.Checked=false;TopMost=false;top.CheckedChanged+=delegate{TopMost=top.Checked;};Controls.Add(top);
    MakeLabel("Координаты остаются на ПК. HUB подключается только для чтения меток.\r\nБуфер заменяется координатами; закрой чат и меню игры.",20,504,550,50,9,false);
-   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();
-   timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();hubTimer.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
+   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();
+   timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();hubTimer.Stop();layoutSave.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
   }
   void Place(Control c,int x,int y,int w,int h){c.SetBounds(x,y,w,h);c.Visible=true;}
   void MinimalLayout(){
@@ -140,11 +149,12 @@ namespace ScumPositionProbe {
     case "Стоп · F9":Place(c,185,496,150,40);break;
    }}
   }
+  void BuildAutoHide(){autoHide.SetBounds(385,511,290,27);autoHide.Text="Скрывать карту при курсоре";autoHide.Font=new Font("Segoe UI",9);autoHide.Checked=true;try{autoHide.Checked=File.ReadAllText(UserSettings.PathFor("auto-hide.txt")).Trim()!="0";}catch{}autoHide.CheckedChanged+=delegate{try{File.WriteAllText(UserSettings.PathFor("auto-hide.txt"),autoHide.Checked?"1":"0");}catch{}if(!autoHide.Checked){menuCursor=autoHidden=lastCursor=false;ApplyVisibility();}};Controls.Add(autoHide);}
   void BuildKeyPicker(){
-   try{int key;if(Int32.TryParse(File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"copy-key.txt")),out key)&&KeyCapture.Allowed((Keys)key))copyKey=(ushort)key;}catch{}
+   try{int key;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor("copy-key.txt")),out key)&&KeyCapture.Allowed((Keys)key))copyKey=(ushort)key;}catch{}
    mode.Items[0]="Вручную";mode.Items[1]="Автоматически";mode.Width=155;
    keyPicker.SetBounds(190,451,145,29);keyPicker.Text="Клавиша: "+((Keys)copyKey).ToString();StyleButton(keyPicker);
-   keyPicker.Click+=delegate{using(KeyCapture dialog=new KeyCapture()){if(dialog.ShowDialog(this)!=DialogResult.OK)return;copyKey=(ushort)dialog.Selected;keyPicker.Text="Клавиша: "+dialog.Selected;try{File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"copy-key.txt"),copyKey.ToString());}catch{}}};Controls.Add(keyPicker);
+   keyPicker.Click+=delegate{using(KeyCapture dialog=new KeyCapture()){if(dialog.ShowDialog(this)!=DialogResult.OK)return;copyKey=(ushort)dialog.Selected;keyPicker.Text="Клавиша: "+dialog.Selected;try{File.WriteAllText(UserSettings.PathFor("copy-key.txt"),copyKey.ToString());}catch{}}};Controls.Add(keyPicker);
   }
   Label MakeLabel(string text,int x,int y,int w,int h,int size,bool bold){Label l=new Label();l.Text=text;l.SetBounds(x,y,w,h);l.Font=new Font("Segoe UI",size,bold?FontStyle.Bold:FontStyle.Regular);Controls.Add(l);return l;}
   void StyleButton(Button b){b.FlatStyle=FlatStyle.Flat;b.BackColor=Color.FromArgb(34,46,52);b.ForeColor=ForeColor;}
@@ -163,7 +173,9 @@ namespace ScumPositionProbe {
    long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(!movingWindow&&now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
    metrics.Text="Попытки: "+attempts+"   Получено: "+successes+"   Изменений: "+changes+"   Нет ответа: "+timeouts+"\r\nПоследние координаты: "+(lastSuccess<0?"ещё не получены":((now-lastSuccess)/1000.0).ToString("0.0")+" с назад")+"   Пропуски ввода: "+blocked;
    }
+   UpdateMenuVisibility(active,now);
    if(!running)return;
+   if(menuCursor){state.Text="Меню игры: карта скрыта, копирование на паузе.";return;}
    if(mode.SelectedIndex==0){uint seq=Native.GetClipboardSequenceNumber();if(active&&seq!=oldSequence){oldSequence=seq;try{if(Clipboard.ContainsText(TextDataFormat.UnicodeText)){Position copied;if(Position.TryParse(Clipboard.GetText(TextDataFormat.UnicodeText),out copied))Record(copied);}}catch(ExternalException){}}return;}
    if(phase==1){if(!active||pid!=gamePid||window!=gameWindow||now>=keyUpAt){ReleaseKeys();phase=active&&pid==gamePid&&window==gameWindow?2:0;clipboardUntil=now+650;}else return;}
    if(!active){focusSince=-1;phase=0;state.Text="Пауза: переключись в SCUM.";return;}
@@ -181,14 +193,17 @@ namespace ScumPositionProbe {
   }
   void ReadClipboard(){uint seq=Native.GetClipboardSequenceNumber();if(seq==oldSequence)return;try{if(Clipboard.ContainsText(TextDataFormat.UnicodeText)){Position pos;if(Position.TryParse(Clipboard.GetText(TextDataFormat.UnicodeText),out pos)){oldSequence=seq;Record(pos);if(phase==1){ReleaseKeys();}phase=0;}}}catch(ExternalException){}}
   readonly NumericUpDown mapX=new NumericUpDown(),mapY=new NumericUpDown(),mapSize=new NumericUpDown();bool layoutBusy;
+  readonly Timer layoutSave=new Timer();
+  void QueueLayoutSave(){layoutSave.Stop();layoutSave.Start();}
   void BuildMapSettings(){
+   layoutSave.Interval=300;layoutSave.Tick+=delegate{layoutSave.Stop();SaveMapSettings();};
    MakeLabel("ПОЛОЖЕНИЕ И РАЗМЕР МИНИКАРТЫ",20,822,550,25,10,true);
    MakeLabel("X на экране",20,853,150,22,9,false);MakeLabel("Y на экране",200,853,150,22,9,false);MakeLabel("Размер, пикс.",380,853,170,22,9,false);
    NumericUpDown[] fields={mapX,mapY,mapSize};int[] x={20,200,380};
    for(int i=0;i<3;i++){fields[i].SetBounds(x[i],880,165,28);fields[i].Minimum=i==2?160:-10000;fields[i].Maximum=i==2?1000:10000;fields[i].Increment=i==2?10:5;Controls.Add(fields[i]);}
    LoadMapSettings();SyncMapSettings();
    foreach(NumericUpDown n in fields)n.ValueChanged+=delegate{if(layoutBusy)return;mini.SetBounds((int)mapX.Value,(int)mapY.Value,(int)mapSize.Value,(int)mapSize.Value);mini.Invalidate();};
-   mini.LocationChanged+=delegate{SyncMapSettings();};mini.SizeChanged+=delegate{SyncMapSettings();};
+   mini.LocationChanged+=delegate{SyncMapSettings();QueueLayoutSave();};mini.SizeChanged+=delegate{SyncMapSettings();QueueLayoutSave();};
    Button move=new Button();move.SetBounds(20,923,260,35);move.Text="Переместить карту мышью · F7";StyleButton(move);move.Click+=delegate{if(mini.Locked)mini.ToggleLock();mini.Show();};Controls.Add(move);
    Button reset=new Button();reset.SetBounds(300,923,250,35);reset.Text="Вернуть карту на экран";StyleButton(reset);reset.Click+=delegate{Rectangle a=Screen.FromControl(this).WorkingArea;mini.SetBounds(a.Left+25,a.Top+120,350,350);SyncMapSettings();};Controls.Add(reset);
    MakeLabel("X/Y работают и при сквозных кликах. F7 — снова заблокировать мышь.\r\nВсе настройки доступны в одном окне.",20,971,550,50,9,false);
@@ -196,12 +211,12 @@ namespace ScumPositionProbe {
   void BuildOpacity(){
    MakeLabel("Непрозрачность карты",610,320,350,25,11,true);
    ComboBox opacity=new ComboBox();opacity.SetBounds(610,357,180,30);opacity.DropDownStyle=ComboBoxStyle.DropDownList;opacity.Items.AddRange(new object[]{"100%","75%","50%","25%"});
-   int selected=0;try{Int32.TryParse(File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"opacity.txt")),out selected);}catch{}selected=Math.Max(0,Math.Min(3,selected));opacity.SelectedIndex=selected;mini.SetMapOpacity(1-selected*.25);
-   opacity.SelectedIndexChanged+=delegate{mini.SetMapOpacity(1-opacity.SelectedIndex*.25);try{File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"opacity.txt"),opacity.SelectedIndex.ToString());}catch{}};Controls.Add(opacity);
+   int selected=0;try{Int32.TryParse(File.ReadAllText(UserSettings.PathFor("opacity.txt")),out selected);}catch{}selected=Math.Max(0,Math.Min(3,selected));opacity.SelectedIndex=selected;mini.SetMapOpacity(1-selected*.25);
+   opacity.SelectedIndexChanged+=delegate{mini.SetMapOpacity(1-opacity.SelectedIndex*.25);try{File.WriteAllText(UserSettings.PathFor("opacity.txt"),opacity.SelectedIndex.ToString());}catch{}};Controls.Add(opacity);
   }
   void SyncMapSettings(){layoutBusy=true;mapX.Value=Math.Max(mapX.Minimum,Math.Min(mapX.Maximum,mini.Left));mapY.Value=Math.Max(mapY.Minimum,Math.Min(mapY.Maximum,mini.Top));mapSize.Value=Math.Max(mapSize.Minimum,Math.Min(mapSize.Maximum,mini.Width));layoutBusy=false;}
-  void LoadMapSettings(){try{string[] v=File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout.txt")).Split(new char[]{','},StringSplitOptions.None);int x,y,size;if(v.Length==3&&Int32.TryParse(v[0],out x)&&Int32.TryParse(v[1],out y)&&Int32.TryParse(v[2],out size)){size=Math.Max(160,Math.Min(1000,size));Rectangle bounds=new Rectangle(x,y,size,size);bool visible=false;foreach(Screen screen in Screen.AllScreens)if(screen.WorkingArea.IntersectsWith(bounds))visible=true;if(visible)mini.SetBounds(x,y,size,size);}}catch{}}
-  void SaveMapSettings(){try{File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout.txt"),mini.Left+","+mini.Top+","+mini.Width);}catch{}}
+  void LoadMapSettings(){try{string[] v=File.ReadAllText(UserSettings.PathFor("layout.txt")).Split(new char[]{','},StringSplitOptions.None);int x,y,size;if(v.Length==3&&Int32.TryParse(v[0],out x)&&Int32.TryParse(v[1],out y)&&Int32.TryParse(v[2],out size)){size=Math.Max(160,Math.Min(1000,size));Rectangle bounds=new Rectangle(x,y,size,size);bool visible=false;foreach(Screen screen in Screen.AllScreens)if(screen.WorkingArea.IntersectsWith(bounds))visible=true;if(visible)mini.SetBounds(x,y,size,size);}}catch{}}
+  void SaveMapSettings(){try{File.WriteAllText(UserSettings.PathFor("layout.txt"),mini.Left+","+mini.Top+","+mini.Width);}catch{}}
   void Record(Position pos){bool changed=previous!=null&&(Math.Abs(pos.X-previous.X)>.01||Math.Abs(pos.Y-previous.Y)>.01||Math.Abs(pos.Z-previous.Z)>.01);successes++;if(changed)changes++;lastSuccess=clock.ElapsedMilliseconds;previous=pos;mini.SetPosition(pos);positionLabel.Text=pos.Display()+"   "+MapMath.Sector(MapMath.NormX(pos.X),MapMath.NormY(pos.Y));state.Text=changed?"Координаты обновились во время движения.":"Координаты получены. Пробеги несколько метров.";
    try{if(log!=null){log.WriteLine(DateTime.UtcNow.ToString("o")+","+pos.Number(pos.X)+","+pos.Number(pos.Y)+","+pos.Number(pos.Z)+","+(pos.HasYaw?pos.Number(pos.Yaw):"")+","+(changed?"1":"0"));log.Flush();}}catch(Exception){Stop("Ошибка записи журнала. Считывание остановлено.");}
   }
