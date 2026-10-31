@@ -42,7 +42,8 @@ const panel = (publicPost = false) => ({
         { label: 'Протект', value: 'fury:protect', description: 'Время и обновление протекта', emoji: { name: '🛡️' } },
         { label: 'Рейды', value: 'fury:raids', description: 'Ближайшие рейды и участие', emoji: { name: '🎯' } },
         { label: 'Задачи', value: 'fury:tasks', description: 'Список задач отряда', emoji: { name: '📋' } },
-        { label: 'Склад', value: 'fury:explosives', description: 'Запасы и редактирование взрывчатки', emoji: { name: '📦' } }
+        { label: 'Склад', value: 'fury:explosives', description: 'Запасы и редактирование взрывчатки', emoji: { name: '📦' } },
+        { label: 'Миникарта', value: 'fury:minimap', description: 'Скачать миникарту SCUM HUB для Windows', emoji: { name: '🗺️' } }
       ] }),
       row(button('НАС РЕЙДЯТ', 'fury:alarm', 4), { type: 2, style: 5, label: 'SCUM HUB ↗', url: homepage }, { type: 2, style: 5, label: 'КАРТА ↗', url: homepage.replace(/\/?(?:\?.*)?$/, '/') + '?section=map' })
     ]
@@ -362,6 +363,9 @@ async function registerGlobalClear(){
  }catch(e){console.error('[discord] /clear registration',e.message)}
 }
 async function handle(interaction) {
+  if(interaction.type===InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:menu' && interaction.data?.values?.[0]==='fury:minimap'){
+    try{const file=readFileSync('/tmp/SCUM_HUB_MiniMap.exe');if(file.length<100000||file[0]!==77||file[1]!==90)throw Error('Invalid executable');const reply=ephem('🗺️ **Миникарта SCUM HUB · Windows**\nСкачай файл ниже и запусти. Карта встроена, установка не нужна.\nВход — своим кодом HUB. F8 — старт, F9 — стоп, F7 — перемещение карты.');reply.data.minimapFile=file;return reply;}catch{return ephem('Файл миникарты временно недоступен. Сообщи администратору.');}
+  }
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if(interaction.type===InteractionType.APPLICATION_COMMAND&&interaction.data?.name==='clear'){
    if(interaction.guild_id)return ephem('Команда работает только в личке с ботом.');
@@ -820,12 +824,10 @@ http.createServer(async (req, res) => {
       const data = reply?.data || { content: 'Не удалось получить ответ.' };
       try {
         const url = 'https://discord.com/api/v10/webhooks/' + encodeURIComponent(appId) + '/' + encodeURIComponent(token) + '/messages/@original';
-        const response = await fetch(url, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: data.content || '', embeds: data.embeds || [], components: data.components || [] }),
-          signal: AbortSignal.timeout(8000)
-        });
+        const payload={content:data.content||'',embeds:data.embeds||[],components:data.components||[]};
+        let body=JSON.stringify(payload),headers={'Content-Type':'application/json'};
+        if(data.minimapFile){payload.attachments=[{id:0,filename:'SCUM_HUB_MiniMap.exe'}];const form=new FormData();form.set('payload_json',JSON.stringify(payload));form.set('files[0]',new Blob([data.minimapFile],{type:'application/octet-stream'}),'SCUM_HUB_MiniMap.exe');body=form;headers={};}
+        const response = await fetch(url,{method:'PATCH',headers,body,signal:AbortSignal.timeout(data.minimapFile?60000:8000)});
         if (!response.ok) console.error('[discord] deferred response failed:', response.status);
       } catch (error) {
         console.error('[discord] deferred response transport:', error?.message || 'Unknown error');
