@@ -1,4 +1,5 @@
 name: Build mini-map and update Discord
+# Approved release: cursor auto-hide and persistent layout
 on:
   push:
     branches: [scum-hub-migration]
