@@ -1,13 +1,5 @@
 name: Deploy Discord notification optimization
 on:
-  push:
-    branches: [scum-hub-migration]
-    paths:
-      - src/server.js
-      - src/d1-backend.js
-      - tests/pending-notifications.test.js
-      - tests/notification-poll.test.js
-      - .github/workflows/migration-optimize.yml
   workflow_dispatch:
 concurrency:
   group: discord-d1-migration-deploy
