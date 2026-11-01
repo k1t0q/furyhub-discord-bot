@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: offline navigator, manual markers, ally sharing at 150 ms
+# Approved release: Windows navigator assembly compatibility fix
 on:
   push:
     branches: [scum-hub-migration]
@@ -20,7 +20,7 @@ jobs:
           sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil python3-numpy python3-scipy fonts-dejavu-core
           python3 minimap/build-map.py
           python3 minimap/build-road-graph.py
-          mcs -target:winexe -out:minimap/SCUM_HUB_MiniMap.exe -win32icon:minimap/SH.ico -resource:minimap/SH.ico,ScumPositionProbe.SH.ico -resource:minimap/map.jpg,ScumPositionProbe.map.jpg -resource:minimap/roads.bin,ScumPositionProbe.roads.bin -resource:minimap/NAVIGATION-NOTICES.txt,ScumPositionProbe.NAVIGATION-NOTICES.txt -resource:minimap/CREDITS.txt,ScumPositionProbe.CREDITS.txt -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Web.Extensions.dll -r:System.Net.Http.dll minimap/PositionProbe.cs minimap/HubClient.cs minimap/MiniMap.cs minimap/MarkerMergeTests.cs minimap/KeyCapture.cs minimap/AllyLive.cs minimap/RoadNavigation.cs minimap/NavigationTests.cs
+          python3 minimap/build-windows.py
           mono minimap/SCUM_HUB_MiniMap.exe --self-test
           cat minimap/self-test.txt
           sha256sum minimap/SCUM_HUB_MiniMap.exe
