@@ -68,7 +68,8 @@ namespace ScumPositionProbe {
     if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,x+7,y-7,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,x+9,y-7);}}
    }
    List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
-   foreach(AllyPosition ally in Allies){float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
+   DateTime alliesNow=DateTime.UtcNow;
+   foreach(AllyPosition ally in Allies){if((alliesNow-ally.Observed).TotalSeconds>60)continue;float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
     float realX=ax,realY=ay;
     for(int attempt=0;attempt<81;attempt++){bool occupied=Current!=null&&Math.Pow(ax-midX,2)+Math.Pow(ay-midY,2)<256;foreach(PointF dot in allyDots)if(Math.Pow(ax-dot.X,2)+Math.Pow(ay-dot.Y,2)<121){occupied=true;break;}if(!occupied)break;double angle=attempt*2.399963,r=16+Math.Sqrt(attempt)*4;ax=realX+(float)(Math.Cos(angle)*r);ay=realY+(float)(Math.Sin(angle)*r);}
     allyDots.Add(new PointF(ax,ay));if(Math.Abs(ax-realX)+Math.Abs(ay-realY)>1){using(Pen link=new Pen(Color.FromArgb(150,123,225,146)))g.DrawLine(link,realX,realY,ax,ay);g.FillEllipse(Brushes.LightGreen,realX-1,realY-1,2,2);}
