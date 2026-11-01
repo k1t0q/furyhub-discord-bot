@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: cursor auto-hide and persistent layout
+# Approved release: offline navigator, manual markers, ally sharing at 150 ms
 on:
   push:
     branches: [scum-hub-migration]
@@ -17,11 +17,13 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil fonts-dejavu-core
+          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil python3-numpy python3-scipy fonts-dejavu-core
           python3 minimap/build-map.py
-          mcs -target:winexe -out:minimap/SCUM_HUB_MiniMap.exe -win32icon:minimap/SH.ico -resource:minimap/SH.ico,ScumPositionProbe.SH.ico -resource:minimap/map.jpg,ScumPositionProbe.map.jpg -r:System.Drawing.dll -r:System.Windows.Forms.dll -r:System.Web.Extensions.dll -r:System.Net.Http.dll minimap/PositionProbe.cs minimap/HubClient.cs minimap/MiniMap.cs minimap/MarkerMergeTests.cs minimap/KeyCapture.cs
+          python3 minimap/build-road-graph.py
+          python3 minimap/build-windows.py
           mono minimap/SCUM_HUB_MiniMap.exe --self-test
           cat minimap/self-test.txt
+          sha256sum minimap/SCUM_HUB_MiniMap.exe
           node --check src/server.js
       - name: Deploy menu and executable
         env:
@@ -38,4 +40,4 @@ jobs:
           PORT="${SSH_PORT:-22}"
           ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
           scp -i ~/.ssh/migration_key -P "$PORT" minimap/SCUM_HUB_MiniMap.exe "$SSH_USER@$SSH_HOST:/tmp/SCUM_HUB_MiniMap.exe"
-          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; test -s /tmp/SCUM_HUB_MiniMap.exe; chmod 644 /tmp/SCUM_HUB_MiniMap.exe; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; curl -fsS --max-time 30 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status'
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; test -s /tmp/SCUM_HUB_MiniMap.exe; chmod 644 /tmp/SCUM_HUB_MiniMap.exe; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; curl -fsS --max-time 30 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status; minimap_bot_dir=$(systemctl show scum-hub-bot -p WorkingDirectory --value); test -n "$minimap_bot_dir"; cmp /tmp/SCUM_HUB_MiniMap.exe "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"; sha256sum "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"'
