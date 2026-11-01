@@ -18,10 +18,10 @@ namespace ScumPositionProbe {
   DateTime observed;
   public void Start(){Task.Run((Func<Task>)Run);}
   void Report(string value){if(Status!=null)Status(value);}
-  async Task Run(){while(!cancel.IsCancellationRequested){try{using(ClientWebSocket ws=new ClientWebSocket()){socket=ws;ws.Options.Cookies=cookies;ws.Options.SetRequestHeader("Origin","https://scum-hub.ru");using(CancellationTokenSource connect=CancellationTokenSource.CreateLinkedTokenSource(cancel.Token)){connect.CancelAfter(10000);await ws.ConnectAsync(new Uri("wss://scum-hub.ru/api/minimap/live"),connect.Token);}Report("Союзники: подключено · 100 мс");
+  async Task Run(){while(!cancel.IsCancellationRequested){try{using(ClientWebSocket ws=new ClientWebSocket()){socket=ws;ws.Options.Cookies=cookies;ws.Options.SetRequestHeader("Origin","https://scum-hub.ru");using(CancellationTokenSource connect=CancellationTokenSource.CreateLinkedTokenSource(cancel.Token)){connect.CancelAfter(10000);await ws.ConnectAsync(new Uri("wss://scum-hub.ru/api/minimap/live"),connect.Token);}Report("Союзники: подключено · 150 мс");
     Task receive=Receive(ws);bool wasSharing=true;DateTime renew=DateTime.UtcNow.AddMinutes(4);
     while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested&&DateTime.UtcNow<renew){string packet=null;long sendingRevision=0;if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&revision!=sentRevision&&(DateTime.UtcNow-observed).TotalMilliseconds<300){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}wasSharing=Sharing;
-     if(packet!=null){byte[] bytes=Encoding.UTF8.GetBytes(packet);await ws.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,cancel.Token);if(sendingRevision>0){lock(gate){sentRevision=sendingRevision;}}}await Task.Delay(100,cancel.Token);
+     if(packet!=null){byte[] bytes=Encoding.UTF8.GetBytes(packet);await ws.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,cancel.Token);if(sendingRevision>0){lock(gate){sentRevision=sendingRevision;}}}await Task.Delay(150,cancel.Token);
     }ws.Abort();try{await receive;}catch{}
    }}catch(Exception){if(!cancel.IsCancellationRequested)Report("Союзники: нет связи · последние позиции");}finally{socket=null;}
    try{await Task.Delay(2000,cancel.Token);}catch{break;}
