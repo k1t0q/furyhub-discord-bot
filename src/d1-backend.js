@@ -25,12 +25,25 @@ WHERE (e.actor_id IS NULL OR m.id<>e.actor_id)
   (json_type(p.categories,'$.'||e.category)='true'
    OR (e.category='base' AND json_type(p.categories,'$.stash')='true')) ELSE 0 END
 ORDER BY e.id DESC,l.discord_user_id`;
+// Retain the existing first-link selection, including inactive/missing-member handling.
+export const protectActivityQuery = `SELECT p.updated_at,p.effective_at FROM protect_updates p
+WHERE p.squad_id=(SELECT m.squad_id FROM members m
+ WHERE m.id=(SELECT member_id FROM discord_member_links LIMIT 1) AND m.is_active=1 LIMIT 1)
+ORDER BY p.updated_at DESC LIMIT 1`;
 export function createD1Backend(env=process.env,fetcher=fetch){
  const endpoint='https://api.cloudflare.com/client/v4/accounts/'+env.CF_ACCOUNT_ID+'/d1/database/'+env.CF_D1_DATABASE_ID+'/query';
  const sign=src=>{if(typeof src!=='string'||!src.startsWith('https://ik.imagekit.io/')||!env.IMAGEKIT_PRIVATE_KEY)return src;const u=new URL(src);u.searchParams.delete('ik-t');u.searchParams.delete('ik-s');const expiry=Math.floor(Date.now()/1000)+7200;const sig=createHmac('sha1',env.IMAGEKIT_PRIVATE_KEY.trim()).update(u.pathname.split('/').slice(2).join('/')+(u.search||'')+expiry).digest('hex');u.searchParams.set('ik-t',String(expiry));u.searchParams.set('ik-s',sig);return u.href};
  const signRows=rows=>rows.map(r=>({...r,...(Array.isArray(r.images)?{images:r.images.map(sign)}:{}),...(Array.isArray(r.target_images)?{target_images:r.target_images.map(sign)}:{})}));
  const ready=()=>!!(env.CF_ACCOUNT_ID&&env.CF_D1_DATABASE_ID&&env.CF_D1_API_TOKEN);
  async function sql(query,params=[]){if(!ready())throw Error('D1 not configured');const r=await fetcher(endpoint,{method:'POST',headers:{Authorization:'Bearer '+env.CF_D1_API_TOKEN,'content-type':'application/json'},body:JSON.stringify({sql:query,params:params.map(value)}),signal:AbortSignal.timeout(15000)});const v=await r.json();if(!r.ok||!v.success)throw Error('D1 request failed '+r.status);return (v.result?.[0]?.results||[]).map(decode)}
+ // Schema metadata only: no account data or query results are cached.
+ const schemaInfo=new Map();
+ async function tableInfo(table){
+  let pending=schemaInfo.get(table);
+  if(!pending){pending=sql('PRAGMA table_info('+ident(table)+')');schemaInfo.set(table,pending);}
+  try{const rows=await pending;if(!rows.length)throw Error('Table metadata unavailable');return rows;}
+  catch(error){if(schemaInfo.get(table)===pending)schemaInfo.delete(table);throw error;}
+ }
  async function db(table,{method='GET',query='',body}={}){
  if(!allowed.has(table))throw Error('Table not allowed');const q=new URLSearchParams(query.replace(/^\?/,'')),args=[],clauses=[];
  for(const [k,v] of q){if(['select','limit','order','on_conflict'].includes(k))continue;const c=ident(k),pos=v.indexOf('.'),op=v.slice(0,pos),raw=v.slice(pos+1);if(op==='is'&&raw==='null'){clauses.push(c+' IS NULL');continue}if(op==='in'){const vals=raw.replace(/^\(|\)$/g,'').split(',');clauses.push(c+' IN ('+vals.map(()=>'?').join(',')+')');args.push(...vals);continue}const ops={eq:'=',neq:'!=',lt:'<',lte:'<=',gt:'>',gte:'>=',ilike:'LIKE'};if(!ops[op])throw Error('Unsupported query filter');clauses.push(c+' '+ops[op]+' ?');args.push(raw==='true'?1:raw==='false'?0:op==='ilike'?raw.replaceAll('*','%'):raw)}
@@ -40,7 +53,7 @@ export function createD1Backend(env=process.env,fetcher=fetch){
  if(method==='GET'){let order='';if(q.get('order')){const [col,dir]=q.get('order').split('.');order=' ORDER BY '+ident(col)+(dir==='desc'?' DESC':' ASC')}return signRows(await sql('SELECT '+select+' FROM '+ident(table)+where+order+' LIMIT '+Math.min(1000,Number(q.get('limit'))||1000),args))}
  if(method==='DELETE'){if(!where)throw Error('Delete filter required');return sql('DELETE FROM '+ident(table)+where+' RETURNING *',args)}
  if(method==='PATCH'){if(!where)throw Error('Update filter required');return sql('UPDATE '+ident(table)+' SET '+Object.keys(body).map(k=>ident(k)+'=?').join(',')+where+' RETURNING *',[...Object.values(body),...args])}
- if(method!=='POST')throw Error('Unsupported method');const info=await sql('PRAGMA table_info('+ident(table)+')'),result=[];
+ if(method!=='POST')throw Error('Unsupported method');const info=await tableInfo(table),result=[];
  for(const input of Array.isArray(body)?body:[body]){const row={...input},cols=info.map(c=>c.name);if(cols.includes('id')&&!row.id)row.id=Date.now()*1000+randomBytes(2).readUInt16BE()%1000;if(cols.includes('created_at')&&!row.created_at)row.created_at=new Date().toISOString();if(table==='presence_history'){const old=await sql('SELECT id FROM presence_history WHERE member_id=? AND day=?',[row.member_id,row.day]);if(old[0])row.id=old[0].id}const keys=Object.keys(row);if(keys.some(k=>!cols.includes(k)))throw Error('Unknown column');if(q.get('on_conflict')==='source_key'&&row.source_key){const old=await sql('SELECT id FROM '+ident(table)+' WHERE source_key=?',[row.source_key]);if(old[0])row.id=old[0].id}const conflict=info.filter(c=>c.pk).map(c=>c.name);const update=keys.filter(k=>!conflict.includes(k));const suffix=conflict.length?' ON CONFLICT ('+conflict.map(ident).join(',')+') DO '+(update.length?'UPDATE SET '+update.map(k=>ident(k)+'=excluded.'+ident(k)).join(','):'NOTHING'):'';result.push(...await sql('INSERT INTO '+ident(table)+' ('+keys.map(ident).join(',')+') VALUES ('+keys.map(()=>'?').join(',')+')'+suffix+' RETURNING *',Object.values(row)))}
  if(['protect_updates','squad_place_posts'].includes(table))for(const r of result){
  const protect=table==='protect_updates';
@@ -65,6 +78,7 @@ export function createD1Backend(env=process.env,fetcher=fetch){
  throw Error('Unsupported D1 RPC '+name);
  }
  async function upload(file,fileName,folder){if(!env.IMAGEKIT_PRIVATE_KEY)throw Error('ImageKit not configured');const form=new FormData();form.set('file',Buffer.from(file).toString('base64'));form.set('fileName',fileName);form.set('folder','/scum-hub/'+folder);const r=await fetcher('https://upload.imagekit.io/api/v1/files/upload',{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.IMAGEKIT_PRIVATE_KEY+':').toString('base64')},body:form});if(!r.ok)throw Error('ImageKit upload failed '+r.status);return (await r.json()).url}
- return {ready,db,rpc,upload,sql,pendingNotifications:since=>sql(pendingNotificationQuery,[since])};
+ return {ready,db,rpc,upload,sql,protectActivity:async()=>(await sql(protectActivityQuery))[0]||null,pendingNotifications:since=>sql(pendingNotificationQuery,[since])};
 }
+
 

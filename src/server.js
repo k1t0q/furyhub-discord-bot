@@ -1003,12 +1003,16 @@ async function receivePlaceScreenshot(message) {
 // Discord bot activity mirrors the current SCUM HUB protection timer.
 let lastProtectActivity = '';
 async function protectActivityText() {
+  let last;
+  if(d1Backend.ready())last=await d1Backend.protectActivity();
+  else{
   const links = await db('discord_member_links',{query:'?select=member_id&limit=1'});
   if (!links.length) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
   const member = await db('members',{query:'?id=eq.'+links[0].member_id+'&select=squad_id&limit=1'});
   if (!member[0]?.squad_id) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
   const entries = await db('protect_updates',{query:'?squad_id=eq.'+member[0].squad_id+'&select=updated_at,effective_at&order=updated_at.desc&limit=1'});
-  const last = entries[0];
+  last = entries[0];
+  }
   if (!last) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
   const base = Date.parse(last.effective_at || last.updated_at);
   if (!Number.isFinite(base)) return 'ПРОТЕКТ · НЕТ ДАННЫХ';
@@ -1259,4 +1263,5 @@ startDiscordGateway();
 // One-minute alarm checks; keep independent from optional normal DM preferences.
 setInterval(()=>void processFuryAlarms(),60000).unref();
 void processFuryAlarms();
+
 
