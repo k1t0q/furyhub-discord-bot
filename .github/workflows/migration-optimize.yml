@@ -1,0 +1,42 @@
+name: Deploy Discord notification optimization
+on:
+  push:
+    branches: [scum-hub-migration]
+    paths:
+      - src/server.js
+      - src/d1-backend.js
+      - tests/pending-notifications.test.js
+      - tests/notification-poll.test.js
+      - .github/workflows/migration-optimize.yml
+  workflow_dispatch:
+concurrency:
+  group: discord-d1-migration-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify pending delivery selection and retries
+        run: |
+          node --check src/server.js
+          node --check src/d1-backend.js
+          node --test tests/d1-backend.test.js tests/pending-notifications.test.js tests/notification-poll.test.js
+      - name: Deploy existing migration bot without replacing mini-map download
+        env:
+          SSH_HOST: ${{ secrets.TIMEWEB_HOST }}
+          SSH_USER: ${{ secrets.TIMEWEB_USER }}
+          SSH_KEY: ${{ secrets.TIMEWEB_SSH_KEY }}
+          SSH_PORT: ${{ secrets.TIMEWEB_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/migration_key
+          chmod 600 ~/.ssh/migration_key
+          PORT="${SSH_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; curl -fsS --max-time 30 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status'

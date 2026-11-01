@@ -3,6 +3,28 @@ const allowed=new Set(['members','presence_history','tasks','task_contributions'
 const ident=s=>{if(!/^[a-z_][a-z0-9_]*$/.test(s))throw Error('Invalid SQL identifier');return '"'+s+'"'};
 const value=x=>typeof x==='boolean'?Number(x):x&&typeof x==='object'?JSON.stringify(x):x;
 const decode=r=>Object.fromEntries(Object.entries(r).map(([k,v])=>{if(['images','target_images','categories','enemy_nicks'].includes(k)&&typeof v==='string'){try{v=JSON.parse(v)}catch{}}if(['enabled','is_active'].includes(k))v=!!v;return[k,v]}));
+// Keep the existing 60-event notification window and delivery retry policy.
+export const pendingNotificationQuery = `
+WITH recent_events AS (
+ SELECT id,squad_id,category,actor_id,title,body,source_key,created_at
+ FROM squad_notification_events WHERE created_at >= ? ORDER BY id DESC LIMIT 60
+)
+SELECT e.*,l.discord_user_id,m.id AS recipient_member_id,p.enabled,p.categories
+FROM recent_events e
+JOIN members m ON m.squad_id=e.squad_id AND m.is_active=1
+JOIN discord_member_links l ON l.member_id=m.id
+JOIN discord_dm_preferences p ON p.member_id=m.id AND p.enabled=1
+LEFT JOIN discord_dm_deliveries d ON d.event_id=e.id AND d.discord_user_id=l.discord_user_id
+WHERE (e.actor_id IS NULL OR m.id<>e.actor_id)
+ AND e.category<>'alarm'
+ AND NOT (lower(coalesce(e.category,'')) IN ('base','stash','other')
+  AND (substr(coalesce(e.source_key,''),1,12)='squad-place:'
+   OR coalesce(e.title,'') IN ('Новая база','Новый схрон','Новое в схроне','Новая метка')))
+ AND (d.event_id IS NULL OR (d.status='failed' AND d.attempts<3))
+ AND CASE WHEN json_valid(p.categories) THEN
+  (json_type(p.categories,'$.'||e.category)='true'
+   OR (e.category='base' AND json_type(p.categories,'$.stash')='true')) ELSE 0 END
+ORDER BY e.id DESC,l.discord_user_id`;
 export function createD1Backend(env=process.env,fetcher=fetch){
  const endpoint='https://api.cloudflare.com/client/v4/accounts/'+env.CF_ACCOUNT_ID+'/d1/database/'+env.CF_D1_DATABASE_ID+'/query';
  const sign=src=>{if(typeof src!=='string'||!src.startsWith('https://ik.imagekit.io/')||!env.IMAGEKIT_PRIVATE_KEY)return src;const u=new URL(src);u.searchParams.delete('ik-t');u.searchParams.delete('ik-s');const expiry=Math.floor(Date.now()/1000)+7200;const sig=createHmac('sha1',env.IMAGEKIT_PRIVATE_KEY.trim()).update(u.pathname.split('/').slice(2).join('/')+(u.search||'')+expiry).digest('hex');u.searchParams.set('ik-t',String(expiry));u.searchParams.set('ik-s',sig);return u.href};
@@ -43,5 +65,6 @@ export function createD1Backend(env=process.env,fetcher=fetch){
  throw Error('Unsupported D1 RPC '+name);
  }
  async function upload(file,fileName,folder){if(!env.IMAGEKIT_PRIVATE_KEY)throw Error('ImageKit not configured');const form=new FormData();form.set('file',Buffer.from(file).toString('base64'));form.set('fileName',fileName);form.set('folder','/scum-hub/'+folder);const r=await fetcher('https://upload.imagekit.io/api/v1/files/upload',{method:'POST',headers:{Authorization:'Basic '+Buffer.from(env.IMAGEKIT_PRIVATE_KEY+':').toString('base64')},body:form});if(!r.ok)throw Error('ImageKit upload failed '+r.status);return (await r.json()).url}
- return {ready,db,rpc,upload,sql};
+ return {ready,db,rpc,upload,sql,pendingNotifications:since=>sql(pendingNotificationQuery,[since])};
 }
+

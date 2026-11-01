@@ -251,12 +251,23 @@ async function processDiscordNotifications() {
     if(d1Backend.ready())await queueMigrationReminders(db);
     const expiredQueued = await queueExpiredProtectNotifications(launchAt);
     if (expiredQueued) console.log('[discord] Protect expired notices queued:', expiredQueued);
-    const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
-    stats.events = events.length;
-    if (!events.length) return;
-    const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
-    const members = await db('members',{query:'?select=id,squad_id'});
-    const prefs = await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
+    let events,links,members,prefs,pendingKeys;
+    if(d1Backend.ready()){
+      const jobs=await d1Backend.pendingNotifications(new Date(launchAt).toISOString());
+      events=[...new Map(jobs.map(j=>[j.id,j])).values()];
+      links=[...new Map(jobs.map(j=>[j.discord_user_id,{discord_user_id:j.discord_user_id,member_id:j.recipient_member_id}])).values()];
+      members=[...new Map(jobs.map(j=>[j.recipient_member_id,{id:j.recipient_member_id,squad_id:j.squad_id}])).values()];
+      prefs=[...new Map(jobs.map(j=>[j.recipient_member_id,{member_id:j.recipient_member_id,enabled:j.enabled,categories:j.categories}])).values()];
+      pendingKeys=new Set(jobs.map(j=>JSON.stringify([j.id,j.discord_user_id])));
+    }else{
+      events=await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
+      if(!events.length)return;
+      links=await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
+      members=await db('members',{query:'?select=id,squad_id'});
+      prefs=await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
+    }
+    stats.events=events.length;
+    if(!events.length)return;
     stats.links = links.length;
     stats.enabled = prefs.filter(p=>p.enabled === true).length;
     const memberById = new Map(members.map(m=>[m.id,m]));
@@ -271,6 +282,7 @@ async function processDiscordNotifications() {
       // Do not also send the legacy generic notification embed for the same alarm.
       if (event.category === 'alarm') { stats.ignoredCategory++; continue; }
       for (const link of links) {
+        if(pendingKeys&&!pendingKeys.has(JSON.stringify([event.id,link.discord_user_id])))continue;
         const member = memberById.get(link.member_id);
         if (!member || member.squad_id !== event.squad_id) { stats.ignoredSquad++; continue; }
         if (member.id === event.actor_id && event.category !== 'alarm') { stats.ignoredActor++; continue; }
@@ -1247,3 +1259,4 @@ startDiscordGateway();
 // One-minute alarm checks; keep independent from optional normal DM preferences.
 setInterval(()=>void processFuryAlarms(),60000).unref();
 void processFuryAlarms();
+
