@@ -13,10 +13,11 @@ namespace ScumPositionProbe {
  public sealed class HubSnapshot {public List<HubMarker> Markers=new List<HubMarker>();public string Nick;}
  public sealed class HubExpiredException:Exception{public HubExpiredException():base("Сессия HUB истекла. Войди снова.") {}}
  public sealed class HubClient:IDisposable {
+  internal CookieContainer Cookies;
   readonly HttpClient client;readonly JavaScriptSerializer json=new JavaScriptSerializer{MaxJsonLength=4194304};
   static HttpClientHandler Handler(){return new HttpClientHandler{CookieContainer=new CookieContainer(),UseCookies=true,AllowAutoRedirect=false,AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate};}
   public HubClient():this(Handler()){}
-  internal HubClient(HttpMessageHandler handler){ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;client=new HttpClient(handler);client.BaseAddress=new Uri("https://scum-hub.ru/");client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Add("Origin","https://scum-hub.ru");client.DefaultRequestHeaders.Add("Accept","application/json");}
+  internal HubClient(HttpMessageHandler handler){HttpClientHandler native=handler as HttpClientHandler;if(native!=null)Cookies=native.CookieContainer;ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;client=new HttpClient(handler);client.BaseAddress=new Uri("https://scum-hub.ru/");client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Add("Origin","https://scum-hub.ru");client.DefaultRequestHeaders.Add("Accept","application/json");}
   public async Task Login(string nick,string role,string code,bool admin){
    Dictionary<string,object> body=new Dictionary<string,object>();body["code"]=code;if(!admin){body["nick"]=nick;if(!String.IsNullOrEmpty(role))body["role"]=role;}
    using(HttpResponseMessage r=await client.PostAsync(admin?"api/admin/login":"api/member/login",new StringContent(json.Serialize(body),Encoding.UTF8,"application/json"))){

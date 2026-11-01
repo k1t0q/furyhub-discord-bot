@@ -1,0 +1,17 @@
+SCUM HUB MiniMap v0.4
+
+Map imagery: scum-map.com
+https://cdn.scum-map.com/tiles/scum/island/v50.0.2025.06.17-scum-1.0/regular
+Level 4, 16 tiles assembled into the bundled 5120×5120 map.jpg.
+Imagery version is identified by the source path; updates are not automatic.
+
+Coordinate bounds and sector layout follow the user's existing map:
+https://github.com/k1t0q/scum-map-k1t0
+World bounds: X 619646.8573 to -905369.0266;
+Y 619659.7258 to -904357.527.
+
+Read-only account integration follows the existing SCUM HUB API:
+https://scum-hub.ru/
+https://github.com/k1t0q/scum-squad-hub
+
+SCUM and other product names belong to their respective owners.
