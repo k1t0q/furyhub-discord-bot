@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: Windows navigator assembly compatibility fix
+# Approved release: automatic session renewal, larger ally arrows and 60-second stale hiding
 on:
   push:
     branches: [scum-hub-migration]

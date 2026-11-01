@@ -176,7 +176,7 @@ namespace ScumPositionProbe {
    UpdateNavigationState();
   }
   void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
-  void StartAllies(){if(live!=null)live.Dispose();AllyLive current=new AllyLive(hub.Cookies);live=current;current.Sharing=sharePosition.Checked;
+  void StartAllies(){if(live!=null)live.Dispose();AllyLive current=new AllyLive(hub);live=current;current.Sharing=sharePosition.Checked;
    current.Updated=delegate(List<AllyPosition> peers){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current&&!mini.IsDisposed){mini.Allies=peers;mini.Invalidate();}});}catch{}};
    current.Status=delegate(string status){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current)hubState.Text=status;});}catch{}};current.Start();
   }
@@ -286,6 +286,7 @@ namespace ScumPositionProbe {
    Require(MapVisibility.ShouldShow(true,false,true)&&!MapVisibility.ShouldShow(true,false,false)&&!MapVisibility.ShouldShow(false,false,true)&&!MapVisibility.ShouldShow(true,true,true),"Overlay focus/manual/menu visibility");lines.Add("PASS overlay focus, manual hide and inventory hide");
    DateTime stamp=DateTime.UtcNow;List<AllyPosition> nearby=AllyLive.ParsePeers("{\"self\":\"me\",\"now\":10000,\"peers\":[{\"id\":\"me\",\"nick\":\"Self\",\"x\":1,\"y\":2,\"heading\":0,\"at\":10000},{\"id\":\"friend\",\"nick\":\"Ally\",\"x\":100,\"y\":200,\"heading\":225,\"at\":5000}]}",stamp);Require(nearby.Count==1&&nearby[0].Nick=="Ally"&&nearby[0].Heading==225&&Math.Abs((stamp-nearby[0].Observed).TotalSeconds-5)<.01,"Live allies parser");lines.Add("PASS ally identity, self exclusion, heading and stale sample age");
    Position still=new Position{X=100,Y=200,Z=3};Require(!AllyLive.Changed(still,still,90,90)&&AllyLive.Changed(still,new Position{X=102,Y=200,Z=3},90,90)&&AllyLive.Changed(still,still,90,91),"Movement-only packets");lines.Add("PASS stationary sample suppression and position/heading changes");
+   HubClient.TestRenewal();lines.Add("PASS session renewal over eight simulated hours, retry backoff and revoked access");
    NavigationTests.Run(lines);
    lines.Add("ALL TESTS PASSED");File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"self-test.txt"),lines.ToArray());return 0;
   }catch(Exception ex){lines.Add("FAIL "+ex.Message);File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"self-test.txt"),lines.ToArray());return 1;}}
@@ -294,3 +295,4 @@ namespace ScumPositionProbe {
   }
  }
 }
+

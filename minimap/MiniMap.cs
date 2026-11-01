@@ -68,12 +68,13 @@ namespace ScumPositionProbe {
     if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,x+7,y-7,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,x+9,y-7);}}
    }
    List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
-   foreach(AllyPosition ally in Allies){float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
+   DateTime alliesNow=DateTime.UtcNow;
+   foreach(AllyPosition ally in Allies){if((alliesNow-ally.Observed).TotalSeconds>60)continue;float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
     float realX=ax,realY=ay;
     for(int attempt=0;attempt<81;attempt++){bool occupied=Current!=null&&Math.Pow(ax-midX,2)+Math.Pow(ay-midY,2)<256;foreach(PointF dot in allyDots)if(Math.Pow(ax-dot.X,2)+Math.Pow(ay-dot.Y,2)<121){occupied=true;break;}if(!occupied)break;double angle=attempt*2.399963,r=16+Math.Sqrt(attempt)*4;ax=realX+(float)(Math.Cos(angle)*r);ay=realY+(float)(Math.Sin(angle)*r);}
     allyDots.Add(new PointF(ax,ay));if(Math.Abs(ax-realX)+Math.Abs(ay-realY)>1){using(Pen link=new Pen(Color.FromArgb(150,123,225,146)))g.DrawLine(link,realX,realY,ax,ay);g.FillEllipse(Brushes.LightGreen,realX-1,realY-1,2,2);}
     double old=(DateTime.UtcNow-ally.Observed).TotalSeconds;GraphicsState ast=g.Save();g.TranslateTransform(ax,ay);g.RotateTransform((float)ally.Heading);
-    PointF[] small={new PointF(0,-6),new PointF(4,5),new PointF(0,2),new PointF(-4,5)};
+    PointF[] small={new PointF(0,-8),new PointF(5,6),new PointF(0,2.5f),new PointF(-5,6)};
     using(SolidBrush b=new SolidBrush(old>3?Color.FromArgb(240,164,68):Color.FromArgb(123,225,146)))g.FillPolygon(b,small);using(Pen pen=new Pen(Color.FromArgb(230,10,20,24),1))g.DrawPolygon(pen,small);g.Restore(ast);
     using(Font f=new Font("Segoe UI",8)){string label=ally.Nick;SizeF extent=g.MeasureString(label,f);RectangleF rect=new RectangleF(Math.Max(2,Math.Min(Width-extent.Width-8,ax+8)),Math.Max(2,ay-10),extent.Width+4,extent.Height);for(int shift=0;shift<20;shift++){bool overlaps=false;foreach(RectangleF prior in names)if(prior.IntersectsWith(rect)){overlaps=true;break;}if(!overlaps)break;rect.Y+=extent.Height+2;if(rect.Bottom>field.Bottom-26)rect.Y=2+shift*2;}names.Add(rect);using(Pen line=new Pen(Color.FromArgb(100,125,210,150)))g.DrawLine(line,ax,ay,rect.Left,rect.Top+rect.Height/2);using(SolidBrush bg=new SolidBrush(Color.FromArgb(190,6,12,16)))g.FillRectangle(bg,rect);g.DrawString(label,f,old>3?Brushes.Orange:Brushes.LightGreen,rect.Left+2,rect.Top);}
    }
@@ -107,3 +108,4 @@ namespace ScumPositionProbe {
   sealed class StopwatchAdapter {readonly System.Diagnostics.Stopwatch clock=System.Diagnostics.Stopwatch.StartNew();double prev;public double Step(){double n=clock.Elapsed.TotalSeconds,d=n-prev;prev=n;return d;}}
  }
 }
+
