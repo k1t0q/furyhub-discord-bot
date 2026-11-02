@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: allow all quick markers from last known position while game is unfocused
+# Approved release: fixed twelve-hour mini-map sessions without automatic renewal
 on:
   push:
     branches: [scum-hub-migration]
