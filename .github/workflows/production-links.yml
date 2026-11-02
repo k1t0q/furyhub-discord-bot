@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: publish mini-map button locations and map previews to the configured Discord channel
+# Approved release: keep last ally position visible for thirty seconds
 on:
   push:
     branches: [scum-hub-migration]
