@@ -38,7 +38,7 @@ namespace ScumPositionProbe {
    readonly DarkComboBox owner;public ItemCollection(DarkComboBox owner){this.owner=owner;}
    public override void Clear(){base.Clear();owner.SelectedIndex=-1;owner.Invalidate();}
   }
-  public readonly ItemCollection Items;int selected=-1;ToolStripDropDown popup;SelectorList list;
+  public readonly ItemCollection Items;int selected=-1;ToolStripDropDown popup;SelectorList list;bool ownerPressDismissed;long ownerDismissedAt;
   public string EmptyText="Выбери значение";
   public Predicate<object> IsSelectable=item=>true;
   public ComboBoxStyle DropDownStyle{get;set;}public DrawMode DrawMode{get;set;}public FlatStyle FlatStyle{get;set;}
@@ -53,7 +53,7 @@ namespace ScumPositionProbe {
   protected override void OnSizeChanged(EventArgs e){base.OnSizeChanged(e);RoundedUi.Clip(this,8);}
   protected override void OnEnabledChanged(EventArgs e){base.OnEnabledChanged(e);if(!Enabled)DroppedDown=false;Invalidate();}
   protected override void OnGotFocus(EventArgs e){base.OnGotFocus(e);Invalidate();}protected override void OnLostFocus(EventArgs e){base.OnLostFocus(e);Invalidate();}
-  protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(Enabled&&e.Button==MouseButtons.Left){Focus();DroppedDown=!DroppedDown;}}
+  protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(Enabled&&e.Button==MouseButtons.Left){if(ownerPressDismissed){ownerPressDismissed=false;if(Stopwatch.GetTimestamp()-ownerDismissedAt<Stopwatch.Frequency/2)return;}Focus();DroppedDown=!DroppedDown;}}
   protected override bool IsInputKey(Keys key){return key==Keys.Up||key==Keys.Down||base.IsInputKey(key);}
   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.F4||e.KeyCode==Keys.Space||e.KeyCode==Keys.Enter||(e.Alt&&e.KeyCode==Keys.Down)){DroppedDown=!DroppedDown;e.Handled=true;}else if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){Step(e.KeyCode==Keys.Down?1:-1);e.Handled=true;}}
   void Step(int direction){int i=SelectedIndex;do{i+=direction;}while(i>=0&&i<Items.Count&&!IsSelectable(Items[i]));if(i>=0&&i<Items.Count)SelectedIndex=i;}
@@ -74,7 +74,7 @@ namespace ScumPositionProbe {
    if(popup!=null)popup.Dispose();popup=new RoundedPopup{AutoSize=false,Padding=Padding.Empty,Margin=Padding.Empty,BackColor=BackColor,DropShadowEnabled=false};
    int height=Math.Min(DropDownHeight,Items.Count*ItemHeight+12);list=new SelectorList(this);list.Size=new Size(Width,height);
    ToolStripControlHost host=new ToolStripControlHost(list){AutoSize=false,Size=list.Size,Margin=Padding.Empty,Padding=Padding.Empty};popup.Items.Add(host);popup.Size=list.Size;RoundedUi.Clip(popup,9);
-   popup.Closed+=delegate{Invalidate();};popup.Show(this,new Point(0,Height+4));list.Focus();list.Invalidate();
+   popup.Closing+=delegate(object sender,ToolStripDropDownClosingEventArgs e){if(e.CloseReason==ToolStripDropDownCloseReason.AppClicked&&RectangleToScreen(ClientRectangle).Contains(Cursor.Position)){ownerPressDismissed=true;ownerDismissedAt=Stopwatch.GetTimestamp();}};popup.Closed+=delegate{Invalidate();};popup.Show(this,new Point(0,Height+4));list.Focus();list.Invalidate();
   }
   internal void RenderOpenPopup(Bitmap target){if(popup==null||!popup.Visible)return;using(Bitmap image=new Bitmap(popup.Width,popup.Height)){popup.DrawToBitmap(image,popup.ClientRectangle);using(Graphics g=Graphics.FromImage(target)){Form form=FindForm();Point location=new Point(popup.Left-form.Left,popup.Top-form.Top);g.DrawImageUnscaled(image,location);}}}
   protected override void Dispose(bool disposing){if(disposing&&popup!=null){popup.Dispose();popup=null;}base.Dispose(disposing);}
@@ -83,20 +83,24 @@ namespace ScumPositionProbe {
    protected override void OnPaint(PaintEventArgs e){}
   }
   sealed class SelectorList:Control {
-   readonly DarkComboBox owner;int offset,hot=-1;bool dragging;int dragY,dragOffset;
+   readonly DarkComboBox owner;int offset,hot=-1;bool dragging;int dragY,dragOffset;readonly Dictionary<int,Bitmap> normalRows=new Dictionary<int,Bitmap>(),hotRows=new Dictionary<int,Bitmap>();readonly Timer scrollTimer=new Timer();readonly Stopwatch scrollClock=new Stopwatch();double animatedOffset,targetOffset;
+   Bitmap RowImage(int index,bool selected){Dictionary<int,Bitmap> cache=selected?hotRows:normalRows;Bitmap image;if(cache.TryGetValue(index,out image))return image;image=new Bitmap(Width-(Scrolls?18:8),owner.ItemHeight);using(Graphics graphics=Graphics.FromImage(image))owner.PaintRow(graphics,new Rectangle(0,0,image.Width,image.Height),index,selected,false);cache[index]=image;return image;}
+   void RedrawNow(){Invalidate();Update();}
+   void AnimateScroll(){double elapsed=Math.Min(.05,scrollClock.Elapsed.TotalSeconds);scrollClock.Restart();animatedOffset+=(targetOffset-animatedOffset)*(1-Math.Exp(-elapsed*26));if(Math.Abs(targetOffset-animatedOffset)<.5){animatedOffset=targetOffset;scrollTimer.Stop();}int next=(int)Math.Round(animatedOffset);if(next!=offset){offset=next;RedrawNow();}}
+   protected override void Dispose(bool disposing){if(disposing){scrollTimer.Dispose();foreach(Bitmap image in normalRows.Values)image.Dispose();foreach(Bitmap image in hotRows.Values)image.Dispose();}base.Dispose(disposing);}
    int ContentHeight{get{return owner.Items.Count*owner.ItemHeight;}}int ViewHeight{get{return Height-12;}}bool Scrolls{get{return ContentHeight>ViewHeight;}}
-   public SelectorList(DarkComboBox owner){this.owner=owner;BackColor=owner.BackColor;ForeColor=owner.ForeColor;Font=owner.Font;TabStop=true;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable,true);}
+   public SelectorList(DarkComboBox owner){this.owner=owner;BackColor=owner.BackColor;ForeColor=owner.ForeColor;Font=owner.Font;TabStop=true;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable,true);scrollTimer.Interval=8;scrollTimer.Tick+=delegate{AnimateScroll();};}
    Rectangle Thumb(){int track=Height-16;int h=Math.Max(24,track*ViewHeight/Math.Max(1,ContentHeight));return new Rectangle(Width-9,8+(track-h)*offset/Math.Max(1,ContentHeight-ViewHeight),4,h);}
    int Row(int y){return (y-6+offset)/owner.ItemHeight;}
-   void Scroll(int amount){offset=Math.Max(0,Math.Min(Math.Max(0,ContentHeight-ViewHeight),offset+amount));Invalidate();}
-   protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(BackColor);for(int i=Math.Max(0,offset/owner.ItemHeight);i<owner.Items.Count;i++){int y=6+i*owner.ItemHeight-offset;if(y>=Height-6)break;owner.PaintRow(e.Graphics,new Rectangle(4,y,Width-(Scrolls?18:8),owner.ItemHeight),i,i==hot,false);}e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;if(Scrolls)using(SolidBrush brush=new SolidBrush(Color.FromArgb(90,108,119)))e.Graphics.FillRectangle(brush,Thumb());using(GraphicsPath path=RoundedUi.Path(new RectangleF(.5f,.5f,Width-1,Height-1),9))using(Pen pen=new Pen(Color.FromArgb(65,82,94)))e.Graphics.DrawPath(pen,path);}
+   void Scroll(int amount){targetOffset=Math.Max(0,Math.Min(Math.Max(0,ContentHeight-ViewHeight),targetOffset+amount));animatedOffset=offset;scrollClock.Restart();scrollTimer.Start();}
+   protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(BackColor);for(int i=Math.Max(0,offset/owner.ItemHeight);i<owner.Items.Count;i++){int y=6+i*owner.ItemHeight-offset;if(y>=Height-6)break;if(y+owner.ItemHeight>=e.ClipRectangle.Top&&y<=e.ClipRectangle.Bottom)e.Graphics.DrawImageUnscaled(RowImage(i,i==hot),4,y);}e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;if(Scrolls)using(SolidBrush brush=new SolidBrush(Color.FromArgb(90,108,119)))e.Graphics.FillRectangle(brush,Thumb());using(GraphicsPath path=RoundedUi.Path(new RectangleF(.5f,.5f,Width-1,Height-1),9))using(Pen pen=new Pen(Color.FromArgb(65,82,94)))e.Graphics.DrawPath(pen,path);}
    protected override void OnMouseWheel(MouseEventArgs e){base.OnMouseWheel(e);Scroll(-e.Delta/120*owner.ItemHeight*3);}
-   protected override void OnMouseMove(MouseEventArgs e){base.OnMouseMove(e);if(dragging){int track=Math.Max(1,Height-16-Thumb().Height);offset=Math.Max(0,Math.Min(ContentHeight-ViewHeight,dragOffset+(e.Y-dragY)*(ContentHeight-ViewHeight)/track));}else hot=e.Y<6||e.Y>=Height-6?-1:Row(e.Y);Invalidate();}
+   protected override void OnMouseMove(MouseEventArgs e){base.OnMouseMove(e);if(dragging){scrollTimer.Stop();int track=Math.Max(1,Height-16-Thumb().Height);int next=Math.Max(0,Math.Min(ContentHeight-ViewHeight,dragOffset+(e.Y-dragY)*(ContentHeight-ViewHeight)/track));if(next!=offset){offset=next;targetOffset=animatedOffset=offset;RedrawNow();}}else{int next=e.Y<6||e.Y>=Height-6?-1:Row(e.Y);if(next!=hot){int previous=hot;hot=next;if(previous>=0)Invalidate(new Rectangle(4,6+previous*owner.ItemHeight-offset,Width-18,owner.ItemHeight));if(hot>=0)Invalidate(new Rectangle(4,6+hot*owner.ItemHeight-offset,Width-18,owner.ItemHeight));Update();}}}
    protected override void OnMouseLeave(EventArgs e){base.OnMouseLeave(e);hot=-1;Invalidate();}
-   protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;if(Scrolls&&e.X>=Width-16){if(Thumb().Contains(e.Location)){dragging=true;dragY=e.Y;dragOffset=offset;Capture=true;}else Scroll(e.Y<Thumb().Top?-ViewHeight:ViewHeight);return;}int i=Row(e.Y);if(e.Y>=6&&i>=0&&i<owner.Items.Count&&owner.IsSelectable(owner.Items[i])){owner.SelectedIndex=i;owner.DroppedDown=false;owner.Focus();}}
+   protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;if(Scrolls&&e.X>=Width-16){if(Thumb().Contains(e.Location)){scrollTimer.Stop();targetOffset=animatedOffset=offset;dragging=true;dragY=e.Y;dragOffset=offset;Capture=true;}else Scroll(e.Y<Thumb().Top?-ViewHeight:ViewHeight);return;}int i=Row(e.Y);if(e.Y>=6&&i>=0&&i<owner.Items.Count&&owner.IsSelectable(owner.Items[i])){owner.SelectedIndex=i;owner.DroppedDown=false;owner.Focus();}}
    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);dragging=false;Capture=false;}
    protected override bool IsInputKey(Keys key){return key==Keys.Up||key==Keys.Down||key==Keys.Home||key==Keys.End||base.IsInputKey(key);}
-   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.Escape||e.KeyCode==Keys.Enter){owner.DroppedDown=false;owner.Focus();e.Handled=true;return;}if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){owner.Step(e.KeyCode==Keys.Down?1:-1);int top=owner.SelectedIndex*owner.ItemHeight;if(top<offset)offset=top;if(top+owner.ItemHeight>offset+ViewHeight)offset=top+owner.ItemHeight-ViewHeight;hot=owner.SelectedIndex;Invalidate();e.Handled=true;}}
+   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.Escape||e.KeyCode==Keys.Enter){owner.DroppedDown=false;owner.Focus();e.Handled=true;return;}if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){owner.Step(e.KeyCode==Keys.Down?1:-1);int top=owner.SelectedIndex*owner.ItemHeight;if(top<offset)offset=top;if(top+owner.ItemHeight>offset+ViewHeight)offset=top+owner.ItemHeight-ViewHeight;targetOffset=animatedOffset=offset;scrollTimer.Stop();hot=owner.SelectedIndex;RedrawNow();e.Handled=true;}}
   }
  }
  public sealed class DarkNumericButtons:NativeWindow {
@@ -233,7 +237,7 @@ namespace ScumPositionProbe {
   Label CompactLabel(Control parent,string text,int x,int y,int width,int height,bool bold=false){Label l=new Label{Text=text,Font=new Font("Segoe UI",bold?10:9,bold?FontStyle.Bold:FontStyle.Regular),ForeColor=bold?Color.FromArgb(145,160,171):ForeColor};MoveTo(l,parent,x,y,width,height);return l;}
   void CompactButton(Button button,bool primary=false){StyleButton(button);button.FlatAppearance.BorderSize=primary?0:1;button.FlatAppearance.BorderColor=Color.FromArgb(43,54,63);button.BackColor=primary?Color.FromArgb(231,71,80):Color.FromArgb(21,29,35);button.Font=new Font("Segoe UI",10,primary?FontStyle.Bold:FontStyle.Regular);button.FlatAppearance.MouseOverBackColor=primary?Color.FromArgb(245,85,94):Color.FromArgb(40,51,60);button.UseVisualStyleBackColor=false;}
   void SelectCompactTab(bool settings){homePanel.Visible=!settings;settingsPanel.Visible=settings;homeTab.BackColor=settings?Color.FromArgb(21,29,35):Color.FromArgb(42,52,61);settingsTab.BackColor=settings?Color.FromArgb(42,52,61):Color.FromArgb(21,29,35);homeTab.Font=new Font("Segoe UI",10,settings?FontStyle.Regular:FontStyle.Bold);settingsTab.Font=new Font("Segoe UI",10,settings?FontStyle.Bold:FontStyle.Regular);}
-  void UpdateConnectionLayout(){if(loginPanel==null)return;bool connected=hub!=null;loginPanel.Visible=!connected;connectedPanel.Visible=connected;connectionNick.Text=hubNick.Text.Trim()+" · HUB подключён";}
+  void UpdateConnectionLayout(){if(loginPanel==null)return;bool connected=hub!=null;loginPanel.Visible=!connected;connectedPanel.Visible=connected;connectionNick.Text=hubNick.Text.Trim()+" · HUB подключён";hubState.SetBounds(connected?0:198,61,connected?472:274,34);hubState.BringToFront();}
   void BuildCompactTabs(){
    List<Control> old=new List<Control>();foreach(Control c in Controls){old.Add(c);c.Visible=false;}
    Func<string,Control> named=name=>old.Find(c=>c.Name==name);
@@ -265,6 +269,8 @@ namespace ScumPositionProbe {
    SelectCompactTab(false);UpdateConnectionLayout();
   }
   void SaveUiPreview(string name,DarkComboBox open=null){if(Environment.OSVersion.Platform!=PlatformID.Win32NT)return;using(Bitmap image=new Bitmap(Width,Height)){DrawToBitmap(image,new Rectangle(0,0,Width,Height));if(open!=null)open.RenderOpenPopup(image);image.Save(name,System.Drawing.Imaging.ImageFormat.Png);}}
+  static void PumpUi(int milliseconds){Stopwatch wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<milliseconds){Application.DoEvents();System.Threading.Thread.Sleep(1);}}
+  static void TestMouseClick(Control control){Cursor.Position=control.PointToScreen(new Point(control.Width/2,control.Height/2));if(!Native.Send(new Native.INPUT[]{new Native.INPUT{type=0,u=new Native.INPUTUNION{mi=new Native.MOUSEINPUT{dwFlags=2}}},new Native.INPUT{type=0,u=new Native.INPUTUNION{mi=new Native.MOUSEINPUT{dwFlags=4}}}}))throw new Exception("Test mouse injection failed");PumpUi(80);}
   internal void TestCompactUI(){
    Show();Application.DoEvents();
    // Windows hosted runners have a 1024x720 desktop and clamp top-level height.
@@ -279,6 +285,9 @@ namespace ScumPositionProbe {
    if(TextRenderer.MeasureText("На машине",navigationMode.Font).Width>navigationMode.Width-38||TextRenderer.MeasureText("Автоматически",mode.Font).Width>mode.Width-38)throw new Exception("Mode text does not fit");
    if(connectedPanel.BackColor!=BackColor)throw new Exception("Connection background must match the form");
    if(navigationGoal.Enabled||navigationGoal.DroppedDown)throw new Exception("Empty destination selector must be disabled");
+   Rectangle loginBounds=homePanel.RectangleToClient(hubLogin.RectangleToScreen(hubLogin.ClientRectangle));if(hubState.Bounds.IntersectsWith(loginBounds)||!hubLogin.Visible||loginPanel.GetChildAtPoint(new Point(hubLogin.Left+hubLogin.Width/2,hubLogin.Top+hubLogin.Height/2))!=hubLogin)throw new Exception("Login button is covered");
+   SaveUiPreview("ui-preview-login.png");
+   if(Environment.OSVersion.Platform==PlatformID.Win32NT){Activate();PumpUi(80);for(int click=0;click<4;click++){TestMouseClick(navigationMode);if(navigationMode.DroppedDown!=(click%2==0))throw new Exception("Repeated selector click did not toggle: "+click);}Console.WriteLine("PASS real mouse repeated dropdown toggle");}
    settingsTab.PerformClick();Application.DoEvents();
    foreach(DarkComboBox combo in new DarkComboBox[]{mode,(DarkComboBox)settingsPanel.Controls.Find("mapOpacity",true)[0]}){if(!(combo is DarkComboBox)||combo.DropDownWidth!=combo.Width||combo.DropDownHeight>240)throw new Exception("Selector style/geometry incorrect");combo.DroppedDown=true;Application.DoEvents();if(!combo.DroppedDown)throw new Exception("Selector did not open");combo.DroppedDown=false;using(Bitmap image=new Bitmap(combo.Width,combo.Height)){combo.DrawToBitmap(image,combo.ClientRectangle);Color pixel=image.GetPixel(combo.Width-3,combo.Height/2);if(pixel.R>190&&pixel.G>190&&pixel.B>190)throw new Exception("White native selector chrome leaked");}}
    if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
