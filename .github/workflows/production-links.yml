@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: refresh mini-map download description with setup, navigation and controls
+# Approved release: concise download description without features and with ordered function keys
 on:
   push:
     branches: [scum-hub-migration]
