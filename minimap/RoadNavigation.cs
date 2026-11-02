@@ -13,9 +13,10 @@ namespace ScumPositionProbe {
  }
  public sealed class RoadRoute {
   public PointF Origin,Target;public PointF[] Points;public string TargetId,TargetName;public int Segment;public PointF Projection;
-  public double Remaining,Deviation;public bool Arrived;
+  public double Remaining,Deviation;public bool Arrived,DirectFoot;
   public void Update(PointF current){
    if(RoadGeometry.Distance(current,Target)<=30){Arrived=true;Remaining=0;return;}
+   if(DirectFoot){PointF foot;RoadGeometry.Project(current,Origin,Target,out foot);Deviation=RoadGeometry.Distance(current,foot);Projection=current;Segment=0;Remaining=RoadGeometry.Distance(current,Target);return;}
    double nearest=Double.PositiveInfinity;int best=Segment;PointF projected=Points[Math.Min(Segment,Points.Length-1)];
    for(int i=Math.Max(0,Segment-3);i<Points.Length-1;i++){
     PointF q;RoadGeometry.Project(current,Points[i],Points[i+1],out q);double d=RoadGeometry.Distance(current,q);
@@ -58,14 +59,20 @@ namespace ScumPositionProbe {
    }
    return graph;
   }
-  bool CrossesWater(PointF a,PointF b){
-   if(water==null)return false;double length=RoadGeometry.Distance(a,b);if(length<15)return false;int steps=Math.Max(1,(int)Math.Ceiling(length/5));double wet=0;
-   for(int i=0;i<=steps;i++){double t=(double)i/steps;int x=Math.Max(0,Math.Min(waterWidth-1,(int)((a.X+(b.X-a.X)*t)*waterWidth))),y=Math.Max(0,Math.Min(waterHeight-1,(int)((a.Y+(b.Y-a.Y)*t)*waterHeight)));int index=y*waterWidth+x;if((water[index/8]&(1<<(index%8)))!=0){wet+=length/steps;if(wet>=30)return true;}else wet=0;}
+  bool CrossesWater(PointF a,PointF b,double minimumWet=30){
+   if(water==null)return false;double length=RoadGeometry.Distance(a,b);if(length<15&&minimumWet>=30)return false;int steps=Math.Max(1,(int)Math.Ceiling(length/5));double wet=0;
+   for(int i=0;i<=steps;i++){double t=(double)i/steps;int x=Math.Max(0,Math.Min(waterWidth-1,(int)((a.X+(b.X-a.X)*t)*waterWidth))),y=Math.Max(0,Math.Min(waterHeight-1,(int)((a.Y+(b.Y-a.Y)*t)*waterHeight)));int index=y*waterWidth+x;if((water[index/8]&(1<<(index%8)))!=0){wet+=length/steps;if(wet>=minimumWet)return true;}else wet=0;}
    return false;
   }
   Dictionary<int,Snap> Nearest(PointF point){Dictionary<int,Snap> candidates=new Dictionary<int,Snap>();for(int i=0;i<Edges.Length;i++){Edge e=Edges[i];PointF q;RoadGeometry.Project(point,Nodes[e.A],Nodes[e.B],out q);double distance=RoadGeometry.Distance(point,q);int component=components[e.A];Snap best;if(distance<=1200&&(!candidates.TryGetValue(component,out best)||distance<best.Distance)&&!CrossesWater(point,q))candidates[component]=new Snap{Edge=i,Point=q,Distance=distance};}return candidates;}
   public RoadRoute Find(PointF from,HubMarker marker){
-   PointF to=new PointF((float)marker.X,(float)marker.Y);Dictionary<int,Snap> starts=Nearest(from),ends=Nearest(to);Snap start=null,end=null;double approach=Double.PositiveInfinity;
+   PointF to=new PointF((float)marker.X,(float)marker.Y);
+   // Nearby destinations use a walking guide. Only do this with a known water
+   // mask, and check the entire direct leg before considering road approaches.
+   if(water!=null&&RoadGeometry.Distance(from,to)<=500&&!CrossesWater(from,to,1)){
+    RoadRoute foot=new RoadRoute{Origin=from,Target=to,TargetId=marker.Id,TargetName=marker.Name,Points=new PointF[]{from,to},Projection=from,DirectFoot=true};foot.Update(from);return foot;
+   }
+   Dictionary<int,Snap> starts=Nearest(from),ends=Nearest(to);Snap start=null,end=null;double approach=Double.PositiveInfinity;
    if(starts.Count==0||ends.Count==0)throw new Exception("Нет подхода по суше к дороге в пределах 1,2 км.");
    foreach(KeyValuePair<int,Snap> candidate in starts){Snap finish;if(ends.TryGetValue(candidate.Key,out finish)&&candidate.Value.Distance+finish.Distance<approach){start=candidate.Value;end=finish;approach=start.Distance+end.Distance;}}
    if(start==null)throw new Exception("Дорожного соединения нет. Прямой маршрут через воду не строится.");
@@ -110,15 +117,15 @@ namespace ScumPositionProbe {
   public async Task Plan(Position position,HubMarker marker){
    if(RoadGeometry.Distance(RoadGeometry.FromPosition(position),new PointF((float)marker.X,(float)marker.Y))<=30){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}
    int own=++version;Busy=true;target=new HubMarker{Id=marker.Id,Name=marker.Name,X=marker.X,Y=marker.Y};HubMarker selected=target;
-   replanAt=now();lastReplan=RoadGeometry.FromPosition(position);PointF start=lastReplan;Status=Route==null?"Строю маршрут по дорогам…":"Перестраиваю маршрут…";Notify();
-   try{RoadGraph roads=await graph;RoadRoute route=await Task.Run(()=>roads.Find(start,selected));if(own!=version)return;Route=route;if(route.Arrived){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}Status="До цели: "+RoadGeometry.Metres(route.Remaining)+" · "+marker.Name;}
+   replanAt=now();lastReplan=RoadGeometry.FromPosition(position);PointF start=lastReplan;Status=Route==null?"Строю маршрут…":"Перестраиваю маршрут…";Notify();
+   try{RoadGraph roads=await graph;RoadRoute route=await Task.Run(()=>roads.Find(start,selected));if(own!=version)return;Route=route;if(route.Arrived){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}Status=(route.DirectFoot?"Пешком · ":"")+"До цели: "+RoadGeometry.Metres(route.Remaining)+" · "+marker.Name;}
    catch(Exception ex){if(own==version){Route=null;Status=ex.Message;}}
    finally{if(own==version){Busy=false;Notify();}}
   }
   public void Update(Position position){
    if(Route==null)return;PointF current=RoadGeometry.FromPosition(position);Route.Update(current);
    if(Route.Arrived){Cancel("Ты прибыл к метке «"+Route.TargetName+"».");return;}
-   if(!Busy)Status="До цели: "+RoadGeometry.Metres(Route.Remaining)+" · "+Route.TargetName;Notify();
+   if(!Busy)Status=(Route.DirectFoot?"Пешком · ":"")+"До цели: "+RoadGeometry.Metres(Route.Remaining)+" · "+Route.TargetName;Notify();
    if(!Busy&&Route.Deviation>60&&(now()-replanAt).TotalSeconds>=2&&RoadGeometry.Distance(current,lastReplan)>15&&target!=null)BackgroundPlanning=Plan(position,target);
   }
  }

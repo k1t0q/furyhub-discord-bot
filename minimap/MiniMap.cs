@@ -98,7 +98,7 @@ namespace ScumPositionProbe {
    RoadRoute route=Navigation.Route;if(route==null)return;
    List<PointF> line=new List<PointF>();line.Add(RouteScreen(route.Projection,field,left,top,span));
    for(int i=route.Segment+1;i<route.Points.Length;i++)line.Add(RouteScreen(route.Points[i],field,left,top,span));
-   if(line.Count>=2){using(Pen shadow=new Pen(Color.FromArgb(220,12,8,20),7)){shadow.LineJoin=LineJoin.Round;g.DrawLines(shadow,line.ToArray());}using(Pen road=new Pen(Color.FromArgb(193,146,255),3.5f)){road.LineJoin=LineJoin.Round;g.DrawLines(road,line.ToArray());}}
+   if(line.Count>=2){if(!route.DirectFoot)using(Pen shadow=new Pen(Color.FromArgb(220,12,8,20),7)){shadow.LineJoin=LineJoin.Round;g.DrawLines(shadow,line.ToArray());}using(Pen road=new Pen(Color.FromArgb(193,146,255),3.5f)){if(route.DirectFoot)road.DashStyle=DashStyle.Dash;road.LineJoin=LineJoin.Round;g.DrawLines(road,line.ToArray());}}
    using(Pen approach=new Pen(Color.FromArgb(220,207,180,255),2)){approach.DashStyle=DashStyle.Dash;
     if(Current!=null&&RoadGeometry.Distance(RoadGeometry.FromPosition(Current),route.Projection)>8)g.DrawLine(approach,RouteScreen(RoadGeometry.FromPosition(Current),field,left,top,span),RouteScreen(route.Projection,field,left,top,span));
     g.DrawLine(approach,RouteScreen(route.Points[route.Points.Length-1],field,left,top,span),RouteScreen(route.Target,field,left,top,span));
