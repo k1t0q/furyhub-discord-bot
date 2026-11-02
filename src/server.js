@@ -1,7 +1,9 @@
+import {createMinimapAnnouncements,renderScumMapPreview} from './minimap-announcements.js';
 import {warehousePanel, warehouseModal, saveWarehouse} from './warehouse.js';
 import {queueMigrationReminders} from './migration-reminders.js';
 import {createD1Backend} from './d1-backend.js';
 const d1Backend=createD1Backend();
+const minimapAnnouncements=createMinimapAnnouncements({sql:(...args)=>d1Backend.sql(...args)});
 import http from 'node:http';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
@@ -790,13 +792,7 @@ http.createServer(async (req, res) => {
           const ym=content.replace(/,/g,'.').match(/\bY\s*[:=]\s*(-?\d+(?:\.\d+)?)/i);
           if(!xm||!ym)throw Error('Координаты метки недоступны. Отправь сообщение повторно.');
           const x=Number(xm[1]),y=Number(ym[1]);
-          dir=await mkdtemp(join(tmpdir(),'scum-preview-'));
-          const output=join(dir,'preview.png');
-          const reference=process.env.SCUM_MAP_REFERENCE_PATH||'/opt/scum-hub-bot/map-detector/reference_map.png';
-          await execFileAsync(process.env.SCUM_MAP_PYTHON||'/opt/scum-hub-bot/.venv/bin/python',
-            ['scripts/preview_scum_map.py',reference,String(x),String(y),output],
-            {cwd:process.cwd(),timeout:18000,maxBuffer:16384});
-          const image=readFileSync(output);
+          const image=await renderScumMapPreview(x,y);
           const form=new FormData();
           form.append('payload_json',JSON.stringify({content:'🗺️ **Предпросмотр маркера**\nX='+x+' Y='+y+'\nМетка ещё не добавлена на карту.',attachments:[{id:0,filename:'scum-marker-preview.png'}]}));
           form.append('files[0]',new Blob([image],{type:'image/png'}),'scum-marker-preview.png');
@@ -885,8 +881,8 @@ http.createServer(async (req, res) => {
 });
 
 if (process.env.DISCORD_DM_NOTIFICATIONS === 'true' && process.env.DISCORD_TEST_MODE === 'false' && process.env.DISCORD_DM_START_AT && Number.isFinite(Date.parse(process.env.DISCORD_DM_START_AT))) {
-  void processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message));
-  setInterval(() => processDiscordNotifications().catch(err => console.error('[discord] DM polling:', err.message)), 60000).unref();
+  const pollServices=()=>{void processDiscordNotifications().catch(err=>console.error('[discord] DM polling:',err.message));if(d1Backend.ready())void minimapAnnouncements.poll();};
+  pollServices();setInterval(pollServices,60000).unref();
   console.log('[discord] DM notifications enabled');
 }
 
@@ -1276,5 +1272,6 @@ startDiscordGateway();
 // One-minute alarm checks; keep independent from optional normal DM preferences.
 setInterval(()=>void processFuryAlarms(),60000).unref();
 void processFuryAlarms();
+
 
 
