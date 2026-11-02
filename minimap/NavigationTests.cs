@@ -26,9 +26,13 @@ namespace ScumPositionProbe {
    Check(AllyLive.Visible(presenceNow,presenceNow.AddSeconds(30))&&!AllyLive.Visible(presenceNow,presenceNow.AddMilliseconds(30001)),"ally hides after thirty seconds");
    using(HubClient presenceHub=new HubClient())using(AllyLive presence=new AllyLive(presenceHub)){
     DateTime sampleNow=presenceNow;presence.UtcNow=()=>sampleNow;Position stationary=new Position{X=100,Y=100};presence.Observe(stationary,0);long initial=presence.Revision;
-    sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary samples throttled");sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial+1,"fresh stationary samples confirm presence every two seconds");
+    sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary samples throttled");sampleNow=sampleNow.AddSeconds(3.999);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary confirmation waits five seconds");sampleNow=sampleNow.AddMilliseconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial+1,"fresh stationary samples confirm presence every five seconds");
     sampleNow=sampleNow.AddSeconds(8);Check(presence.Revision==initial+1,"no confirmation without a newly observed coordinate");
-   }results.Add("PASS thirty-second ally expiry and fresh stationary confirmation throttling");
+    for(int i=0;i<60;i++){sampleNow=sampleNow.AddSeconds(5);presence.Observe(stationary,0);Check(presence.Revision==initial+2+i,"stationary ambush presence remains confirmed");}
+    long beforeSilence=presence.Revision;sampleNow=sampleNow.AddMinutes(2);Check(presence.Revision==beforeSilence,"time alone cannot confirm position");
+   }
+   Check(!AllyLive.Stale(presenceNow,presenceNow.AddSeconds(7))&&AllyLive.Stale(presenceNow,presenceNow.AddMilliseconds(7001)),"five-second stationary confirmations do not flash orange");
+   results.Add("PASS five-minute stationary ambush, five-second fresh confirmations, seven-second stale colour and thirty-second expiry");
    ZoomKeys zoom=new ZoomKeys();Check(zoom.Update(true,true,false,0)==1&&zoom.Update(true,true,false,25)==0&&zoom.Update(true,true,false,400)==1,"zoom press and delayed repeat");
    Check(zoom.Update(false,true,false,425)==0&&zoom.Update(true,false,true,450)==-1,"focus/menu guard and zoom out");
    Check(zoom.Update(true,true,true,500)==0&&zoom.Update(true,false,false,525)==0&&zoom.Update(true,true,false,550)==1,"opposing arrows and release reset");results.Add("PASS keyboard zoom direction, repeat, focus guard and release");
