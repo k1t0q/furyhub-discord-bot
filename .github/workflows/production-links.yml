@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: dark selectors, bounded destination list and empty-state guidance; verified on Windows
+# Approved release: fully rounded selectors, full-width marker list, dark numeric arrows and neutral connection background
 on:
   push:
     branches: [scum-hub-migration]
