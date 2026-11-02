@@ -362,7 +362,7 @@ async function handle(interaction) {
    return ephem('Удалено сообщений бота: **'+n+'**.');
   }
 
-  const mapDecision=String(interaction.data?.custom_id||'').match(/^fury:map-(yes|no):(\d{15,22})$/);
+  const mapDecision=String(interaction.data?.custom_id||'').match(/^fury:map-(yes|no|kind-(?:stash|car|enemy|other)):(\d{15,22})$/);
   if(interaction.type===InteractionType.MESSAGE_COMPONENT && mapDecision){
     const caller=String(interaction.member?.user?.id||interaction.user?.id||'');
     if(!mapImportChannelIds.has(interaction.channel_id)||interaction.guild_id!==allowedGuild)return ephem('Недоступный канал.');
@@ -380,10 +380,17 @@ async function handle(interaction) {
     }
 
     if(mapDecision[1]==='no' && String(msg.author?.id)!==caller)return ephem('Отменить маркер может только автор сообщения.');
-    if(mapDecision[1]==='yes' && !(await linked(interaction)))return ephem('Для добавления маркера привяжи Discord к SCUM HUB.');
+    if((mapDecision[1]==='yes' || mapDecision[1].startsWith('kind-')) && !(await linked(interaction)))return ephem('Для добавления маркера привяжи Discord к SCUM HUB.');
     if(mapDecision[1]==='no'){mapScreenshotCoords.delete(mapDecision[2]);return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'❌ **Маркер не добавлен.**',components:[]}};}
+    if(mapDecision[1]==='yes')return {type:InteractionResponseType.UPDATE_MESSAGE,data:{content:'📍 **Выбери тип маркера:**',components:[row(
+      button('Схрон','fury:map-kind-stash:'+mapDecision[2],3),
+      button('Машина','fury:map-kind-car:'+mapDecision[2],2),
+      button('Вражеская база','fury:map-kind-enemy:'+mapDecision[2],2),
+      button('Метка','fury:map-kind-other:'+mapDecision[2],2),
+      button('Отмена','fury:map-no:'+mapDecision[2],4)
+    )]}};
     const promptId=String(interaction.message?.id||'');
-    setTimeout(()=>void importDiscordMapMessage(msg,true,promptId).catch(async err=>{
+    setTimeout(()=>void importDiscordMapMessage(msg,true,promptId,mapDecision[1].slice(5)).catch(async err=>{
       console.error('[discord] Map approval:',err.message);
       try{await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+promptId,{
         method:'PATCH',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
@@ -1067,7 +1074,7 @@ async function recognizeDiscordMapScreenshot(message) {
   } finally {await rm(folder,{recursive:true,force:true})}
 }
 
-async function importDiscordMapMessage(message, confirmed=false, confirmationMessageId=null) {
+async function importDiscordMapMessage(message, confirmed=false, confirmationMessageId=null, markerType='other') {
   if (!message || !mapImportChannelIds.has(message.channel_id) || message.guild_id !== allowedGuild || message.author?.bot) return;
   const uid = String(message.author?.id || '');
   const mid = String(message.id || '');
@@ -1111,8 +1118,10 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
     if(!prompt.ok)throw Error('Map approval prompt failed '+prompt.status+': '+(await prompt.text()).slice(0,200));
     return;
   }
+  const markerNames={stash:'Схрон',car:'Машина',enemy:'Вражеская база',other:'Метка'};
+  if(!Object.hasOwn(markerNames,markerType))throw Error('Unknown marker type');
   const source='https://discord.com/channels/'+message.guild_id+'/'+message.channel_id+'/'+mid;
-  const duplicate=await db('squad_place_posts',{query:'?squad_id=eq.'+member.squad_id+'&kind=eq.other&comment=ilike.*'+mid+'*&select=id&limit=1'});
+  const duplicate=await db('squad_place_posts',{query:'?squad_id=eq.'+member.squad_id+'&comment=ilike.*'+mid+'*&select=id&limit=1'});
   if (duplicate.length) return;
   const photos=(message.attachments||[]).filter(a=>(/^image\/(png|jpeg|webp|gif)$/i.test(a.content_type||'') || /\.(png|jpe?g|webp|gif)$/i.test(a.filename||'')) && !(message.coordinateScreenshotAttachmentId && String(a.id)===String(message.coordinateScreenshotAttachmentId))).slice(0,5);
   const images=[];
@@ -1135,13 +1144,13 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
     } catch(e) {console.error('[discord] Map photo:',e.message);}
   }
   const title=content.replace(/\{[^}]*\}/g,' ').replace(/\b[XYZPR]\s*[:=]\s*-?\d+(?:[.,]\d+)?/gi,' ').replace(/\s+/g,' ').trim().slice(0,140)||'Маркер';
-  const comment=title+'\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
+  const comment=markerNames[markerType]+': '+title+'\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
   await db('squad_place_posts',{method:'POST',body:{squad_id:member.squad_id,kind:'other',images,comment,created_by:member.id}});
   const posted=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+(confirmationMessageId?'/messages/'+confirmationMessageId:'/messages'),{
     method:confirmationMessageId?'PATCH':'POST',
     headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({
-      content:'📍 **Маркер добавлен на карту SCUM HUB**\nДобавил: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z,
+      content:'📍 **'+markerNames[markerType]+' добавлен(а) на карту SCUM HUB**\nДобавил: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z,
       ...(confirmationMessageId?{}:{message_reference:{type:0,message_id:mid,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false}}),
       allowed_mentions:{parse:[]},
       components:[{type:1,components:[{type:2,style:5,label:'🗺️ Открыть карту',url:homepage.replace(/\/?(?:\?.*)?$/,'/')+'?section=map'}]}]
