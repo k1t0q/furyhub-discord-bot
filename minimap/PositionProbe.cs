@@ -424,11 +424,11 @@ namespace ScumPositionProbe {
   }
   async System.Threading.Tasks.Task AddQuickMarker(string category,string caption){
    if(creatingMarker)return;if(hub==null){state.Text="Сначала подключись к HUB.";return;}
-   if(previous==null||lastSuccess<0||clock.ElapsedMilliseconds-lastSuccess>5000){state.Text="Нужна свежая позиция: включи отслеживание и вернись в игру, затем открой добавление.";return;}
+   if(previous==null||lastSuccess<0){state.Text="Позиция ещё не получена. Включи отслеживание и один раз вернись в игру.";return;}
    Position fixedPosition=new Position{X=previous.X,Y=previous.Y};HubClient current=hub;int generation=hubGeneration;creatingMarker=true;
    try{using(Form dialog=new Form()){
     dialog.HandleCreated+=delegate{RoundedUi.DarkTitle(dialog);};dialog.Text="Добавить: "+caption;dialog.ClientSize=new Size(420,205);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;dialog.MaximizeBox=dialog.MinimizeBox=false;dialog.StartPosition=FormStartPosition.CenterParent;dialog.BackColor=BackColor;dialog.ForeColor=ForeColor;dialog.Font=new Font("Segoe UI",9);
-    Label location=new Label{Text="Точка зафиксирована · "+MapMath.Sector(MapMath.NormX(fixedPosition.X),MapMath.NormY(fixedPosition.Y))+"\r\nX="+fixedPosition.X.ToString("0",CultureInfo.InvariantCulture)+"  Y="+fixedPosition.Y.ToString("0",CultureInfo.InvariantCulture),Location=new Point(18,14),Size=new Size(384,42)};dialog.Controls.Add(location);
+    Label location=new Label{Text="Последняя известная позиция · "+MapMath.Sector(MapMath.NormX(fixedPosition.X),MapMath.NormY(fixedPosition.Y))+"\r\nX="+fixedPosition.X.ToString("0",CultureInfo.InvariantCulture)+"  Y="+fixedPosition.Y.ToString("0",CultureInfo.InvariantCulture),Location=new Point(18,14),Size=new Size(384,42)};dialog.Controls.Add(location);
     dialog.Controls.Add(new Label{Text="Название",Location=new Point(18,65),Size=new Size(384,20)});
     TextBox name=new TextBox{Text=caption,MaxLength=70,Location=new Point(18,90),Size=new Size(384,28)};dialog.Controls.Add(name);
     Button save=new RoundedButton{Text="Сохранить",Location=new Point(18,145),Size=new Size(184,36)},cancel=new RoundedButton{Text="Отмена",DialogResult=DialogResult.Cancel,Location=new Point(218,145),Size=new Size(184,36)};StyleButton(save);StyleButton(cancel);dialog.Controls.Add(save);dialog.Controls.Add(cancel);dialog.AcceptButton=save;dialog.CancelButton=cancel;
