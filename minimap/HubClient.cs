@@ -86,8 +86,9 @@ namespace ScumPositionProbe {
    name=(name??"").Trim();if(name.Length==0||name.Length>70||name.IndexOfAny(new char[]{'\r','\n'})>=0)throw new ArgumentException("Введи название от 1 до 70 символов в одну строку.");
    if(position==null)throw new ArgumentException("Нет позиции игрока.");double x=MapMath.NormX(position.X),y=MapMath.NormY(position.Y);
    if(Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1)throw new ArgumentException("Координаты за пределами карты.");
-   string title=category=="car"?"🚗 "+name:name;
-   return new Dictionary<string,object>{{"table","squad_place_posts"},{"action","insert"},{"values",new Dictionary<string,object>{{"kind",category=="car"?"other":category},{"images",new object[0]},{"map_marker_name",title},{"comment",title+"\nКоординаты: X="+position.X.ToString("R",CultureInfo.InvariantCulture)+" Y="+position.Y.ToString("R",CultureInfo.InvariantCulture)+"\nИсточник: Миникарта SCUM HUB"}}}};
+   if(category=="car")return new Dictionary<string,object>{{"table","squad_map_markers"},{"action","insert"},{"values",new Dictionary<string,object>{{"x",x},{"y",y},{"type","vehicle"},{"name",name},{"note",""},{"icon","🚗"},{"color","#4aa5e6"},{"size",30},{"show_label",true},{"locked",false}}}};
+   string title=name;
+   return new Dictionary<string,object>{{"table","squad_place_posts"},{"action","insert"},{"values",new Dictionary<string,object>{{"kind",category},{"images",new object[0]},{"map_marker_name",title},{"comment",title+"\nКоординаты: X="+position.X.ToString("R",CultureInfo.InvariantCulture)+" Y="+position.Y.ToString("R",CultureInfo.InvariantCulture)+"\nИсточник: Миникарта SCUM HUB"}}}};
   }
   public async Task CreateMarker(string category,string name,Position position){
    Dictionary<string,object> body=MarkerPost(category,name,position);await EnsureSession(CancellationToken.None);
@@ -138,13 +139,19 @@ namespace ScumPositionProbe {
    var handler=new MarkerHandler();using(HubClient client=new HubClient(handler)){
     foreach(string category in new string[]{"stash","car","base","other"}){
      client.CreateMarker(category,"Проверка",position).GetAwaiter().GetResult();var values=(Dictionary<string,object>)handler.Last["values"];
-     if((string)values["kind"]!=(category=="car"?"other":category)||values.ContainsKey("squad_id")||values.ContainsKey("created_by"))throw new Exception("Marker kind or identity error");
-     string title=(string)values["map_marker_name"],comment=(string)values["comment"];
-     if((category=="car")!=title.StartsWith("🚗 "))throw new Exception("Vehicle label missing");
-     var post=new Dictionary<string,object>(values);post["id"]=17;post["created_at"]="2026-11-02T00:00:00Z";
-     HubSnapshot snapshot=Parse(serializer.Serialize(new {posts=new object[]{post},markers=new object[0]}));
-     if(snapshot.Markers.Count!=1||snapshot.Markers[0].Name!=title||snapshot.Markers[0].Kind!=(string)values["kind"]||Math.Abs(snapshot.Markers[0].X-MapMath.NormX(position.X))>1e-9||Math.Abs(snapshot.Markers[0].Y-MapMath.NormY(position.Y))>1e-9)throw new Exception("Created publication does not round-trip to map");
-     if(!comment.Contains("X=12345.125 Y=-54321.5"))throw new Exception("Coordinates changed with culture");
+     if(values.ContainsKey("squad_id")||values.ContainsKey("created_by"))throw new Exception("Client must not set membership identity");
+     HubSnapshot snapshot;string title="Проверка";
+     if(category=="car"){
+      if((string)handler.Last["table"]!="squad_map_markers"||(string)values["type"]!="vehicle"||(string)values["icon"]!="🚗"||(string)values["color"]!="#4aa5e6"||values.ContainsKey("kind"))throw new Exception("Car must be a transport marker, not a base publication");
+      var row=new Dictionary<string,object>(values);row["id"]="vehicle-test";snapshot=Parse(serializer.Serialize(new {posts=new object[0],markers=new object[]{row}}));
+      if(snapshot.Markers.Count!=1||snapshot.Markers[0].Kind!="vehicle"||snapshot.Markers[0].Color.ToArgb()!=ColorTranslator.FromHtml("#4aa5e6").ToArgb()||CanRefreshStash(snapshot.Markers[0]))throw new Exception("Vehicle type, colour or stash separation lost");
+     }else{
+      if((string)values["kind"]!=category||(string)handler.Last["table"]!="squad_place_posts")throw new Exception("Publication kind changed");
+      string comment=(string)values["comment"];if(!comment.Contains("X=12345.125 Y=-54321.5"))throw new Exception("Coordinates changed with culture");
+      var post=new Dictionary<string,object>(values);post["id"]=17;post["created_at"]="2026-11-02T00:00:00Z";snapshot=Parse(serializer.Serialize(new {posts=new object[]{post},markers=new object[0]}));
+      if(snapshot.Markers.Count!=1||snapshot.Markers[0].Kind!=category)throw new Exception("Publication type lost");
+     }
+     if(snapshot.Markers.Count!=1||snapshot.Markers[0].Name!=title||Math.Abs(snapshot.Markers[0].X-MapMath.NormX(position.X))>1e-9||Math.Abs(snapshot.Markers[0].Y-MapMath.NormY(position.Y))>1e-9)throw new Exception("Created point does not round-trip to map");
     }
     int count=handler.Writes;foreach(Position invalid in new Position[]{null,new Position{X=Double.NaN},new Position{X=2000000}}){bool failed=false;try{client.CreateMarker("stash","test",invalid).GetAwaiter().GetResult();}catch(ArgumentException){failed=true;}if(!failed)throw new Exception("Invalid marker coordinates accepted");}
     foreach(string name in new string[]{"",new string('x',71),"one\ntwo"}){bool failed=false;try{client.CreateMarker("stash",name,position).GetAwaiter().GetResult();}catch(ArgumentException){failed=true;}if(!failed)throw new Exception("Invalid marker name accepted");}if(handler.Writes!=count)throw new Exception("Invalid input reached network");
@@ -156,7 +163,7 @@ namespace ScumPositionProbe {
    public int Writes;public Dictionary<string,object> Last;public HttpStatusCode Status=HttpStatusCode.OK;public string Response="{\"data\":[{\"id\":17}],\"error\":null}";
    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancel){
     if(request.Method!=HttpMethod.Post||request.RequestUri.AbsolutePath!="/api/legacy"||!request.Headers.Contains("Origin"))throw new Exception("Wrong marker API");Writes++;Last=new JavaScriptSerializer().DeserializeObject(await request.Content.ReadAsStringAsync()) as Dictionary<string,object>;
-    if((string)Last["table"]!="squad_place_posts"||(string)Last["action"]!="insert")throw new Exception("Wrong marker write");return new HttpResponseMessage(Status){Content=new StringContent(Response)};
+    if(((string)Last["table"]!="squad_place_posts"&&(string)Last["table"]!="squad_map_markers")||(string)Last["action"]!="insert")throw new Exception("Wrong marker write");return new HttpResponseMessage(Status){Content=new StringContent(Response)};
    }
   }
   public static void TestRenewal(){

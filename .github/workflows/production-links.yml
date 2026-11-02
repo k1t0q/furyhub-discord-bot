@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: rounded controls, dark title bars and 12px gap between Home and Settings tabs
+# Approved release: create cars as native blue vehicle markers in the Transport category
 on:
   push:
     branches: [scum-hub-migration]
