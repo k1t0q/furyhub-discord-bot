@@ -1206,7 +1206,7 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
     } catch(e) {console.error('[discord] Map photo:',e.message);}
   }
   const title=content.replace(/\{[^}]*\}/g,' ').replace(/\b[XYZPR]\s*[:=]\s*-?\d+(?:[.,]\d+)?/gi,' ').replace(/\s+/g,' ').trim().slice(0,140)||'Маркер';
-  const comment=markerNames[markerType]+': '+title+'\nКоординаты: X=+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
+  const comment=markerNames[markerType]+': '+title+'\nКоординаты: X='+X+' Y='+Y+' Z='+Z+'\nИсточник: '+source;
   await db('squad_place_posts',{method:'POST',body:{squad_id:member.squad_id,kind:storageKind[markerType],images,comment,created_by:member.id}});
   const posted=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+(confirmationMessageId?'/messages/'+confirmationMessageId:'/messages'),{
     method:confirmationMessageId?'PATCH':'POST',
