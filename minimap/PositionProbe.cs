@@ -53,19 +53,7 @@ namespace ScumPositionProbe {
   public static bool Send(INPUT[] keys){return SendInput((uint)keys.Length,keys,Marshal.SizeOf(typeof(INPUT)))==(uint)keys.Length;}
  }
  public sealed class ProbeForm:Form {
-  sealed class ClearCheckBox:CheckBox {
-   public ClearCheckBox(){FlatStyle=FlatStyle.Flat;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);}
-   protected override void OnPaint(PaintEventArgs e){
-    e.Graphics.Clear(BackColor);int size=Math.Min(Height-4,(int)Math.Round(20*e.Graphics.DpiX/96f)),top=(Height-size)/2;Rectangle square=new Rectangle(1,top,size,size);
-    using(SolidBrush fill=new SolidBrush(Checked?Color.FromArgb(31,139,220):Color.FromArgb(34,46,52)))e.Graphics.FillRectangle(fill,square);
-    using(Pen border=new Pen(Checked?Color.FromArgb(100,195,255):Color.FromArgb(165,185,196),1))e.Graphics.DrawRectangle(border,square);
-    if(Checked){e.Graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;using(Pen tick=new Pen(Color.White,2.5f))e.Graphics.DrawLines(tick,new PointF[]{new PointF(1+size*.2f,top+size*.52f),new PointF(1+size*.43f,top+size*.75f),new PointF(1+size*.82f,top+size*.25f)});}
-    Rectangle text=new Rectangle(size+10,0,Width-size-10,Height);TextRenderer.DrawText(e.Graphics,Text,Font,text,Enabled?ForeColor:SystemColors.GrayText,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.NoPrefix);
-    if(Focused&&ShowFocusCues)ControlPaint.DrawFocusRectangle(e.Graphics,text,ForeColor,BackColor);
-   }
-   protected override void OnCheckedChanged(EventArgs e){base.OnCheckedChanged(e);Invalidate();}
-  }
-  AllyLive live;readonly CheckBox sharePosition=new ClearCheckBox();
+  AllyLive live;readonly CheckBox sharePosition=new CheckBox();
   readonly MiniMapForm mini=new MiniMapForm();HubClient hub;int hubGeneration;bool syncing;readonly Button refreshMarkers=new Button();
   readonly TextBox hubNick=new TextBox(),hubCode=new TextBox();readonly ComboBox hubRole=new ComboBox();readonly CheckBox adminLogin=new CheckBox();readonly Label hubState=new Label();readonly Button hubLogin=new Button();
   void BuildHubUI(){
@@ -147,7 +135,7 @@ namespace ScumPositionProbe {
    
    Place(refreshMarkers,24,269,311,30);
    Place(hubLogin,24,308,192,36);
-   Place(hubState,24,355,311,43);hubState.Font=new Font("Segoe UI",9);hubState.Text="Введи код своего аккаунта HUB.";
+   Place(hubState,24,355,311,32);hubState.Font=new Font("Segoe UI",9);hubState.Text="Введи код своего аккаунта HUB.";
    MakeLabel("ОТСЛЕЖИВАНИЕ",24,416,320,24,10,true);
    Place(mode,24,451,311,29);
    Place(toggle,24,496,150,40);Place(state,24,548,650,38);state.Font=new Font("Segoe UI",9);
@@ -208,7 +196,7 @@ namespace ScumPositionProbe {
    string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.Markers.Find(m=>m.Id==activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
    UpdateNavigationState();
   }
-  void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",10,FontStyle.Bold);sharePosition.BackColor=BackColor;sharePosition.ForeColor=Color.FromArgb(240,246,250);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
+  void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
   void StartAllies(){if(live!=null)live.Dispose();AllyLive current=new AllyLive(hub);live=current;current.Sharing=sharePosition.Checked;
    current.Updated=delegate(List<AllyPosition> peers){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current&&!mini.IsDisposed){mini.Allies=peers;mini.Invalidate();}});}catch{}};
    current.Status=delegate(string status){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current)hubState.Text=status;});}catch{}};current.Start();
