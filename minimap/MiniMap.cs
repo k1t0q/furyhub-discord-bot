@@ -14,6 +14,11 @@ namespace ScumPositionProbe {
   public static double NormalizeAngle(double a){return (a%360+360)%360;}
   public static double DeltaAngle(double a,double b){return (b-a+540)%360-180;}
   public static string Direction(double a){string[] names={"Север","СВ","Восток","ЮВ","Юг","ЮЗ","Запад","СЗ"};return names[(int)Math.Floor((NormalizeAngle(a)+22.5)/45)%8];}
+  public static bool MarkerInView(HubMarker marker,Position current,double viewRadius,int width,int height){
+   if(current==null||width<=0||height<=25)return false;int size=Math.Min(width,height);double span=viewRadius*200/(Left-Right);
+   double x=(marker.X-NormX(current.X))/span*size+size/2.0,y=(marker.Y-NormY(current.Y))/span*size+size/2.0;
+   return x>=0&&x<=size&&y>=0&&y<=Math.Min(size,height-25);
+  }
   public static string Sector(double x,double y){if(x<0||x>=1||y<0||y>=1)return "ВНЕ КАРТЫ";return "DCBAZ"[(int)(y*5)].ToString()+"43210"[(int)(x*5)];}
  }
  public sealed class MiniMapForm:Form {
@@ -65,7 +70,7 @@ namespace ScumPositionProbe {
    DrawNavigation(g,field,left,top,span);
    foreach(HubMarker marker in Markers){float x=(float)(field.Left+(marker.X-left)/span*size),y=(float)(field.Top+(marker.Y-top)/span*size);if(x<field.Left-20||x>field.Right+20||y<field.Top-20||y>field.Bottom+20)continue;
     using(SolidBrush b=new SolidBrush(marker.Color))g.FillEllipse(b,x-4,y-4,8,8);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),2))g.DrawEllipse(p,x-4,y-4,8,8);
-    if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,x+7,y-7,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,x+9,y-7);}}
+    if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);float labelX=Math.Max(field.Left+2,Math.Min(field.Right-text.Width-6,x-text.Width/2-2)),labelY=y-text.Height-8;using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,labelX,labelY,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,labelX+2,labelY);}}
    }
    List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
    DateTime alliesNow=DateTime.UtcNow;
@@ -98,7 +103,7 @@ namespace ScumPositionProbe {
    RoadRoute route=Navigation.Route;if(route==null)return;
    List<PointF> line=new List<PointF>();line.Add(RouteScreen(route.Projection,field,left,top,span));
    for(int i=route.Segment+1;i<route.Points.Length;i++)line.Add(RouteScreen(route.Points[i],field,left,top,span));
-   if(line.Count>=2){using(Pen shadow=new Pen(Color.FromArgb(220,12,8,20),7)){shadow.LineJoin=LineJoin.Round;g.DrawLines(shadow,line.ToArray());}using(Pen road=new Pen(Color.FromArgb(193,146,255),3.5f)){road.LineJoin=LineJoin.Round;g.DrawLines(road,line.ToArray());}}
+   if(line.Count>=2){if(!route.DirectFoot)using(Pen shadow=new Pen(Color.FromArgb(220,12,8,20),7)){shadow.LineJoin=LineJoin.Round;g.DrawLines(shadow,line.ToArray());}using(Pen road=new Pen(Color.FromArgb(193,146,255),3.5f)){if(route.DirectFoot)road.DashStyle=DashStyle.Dash;road.LineJoin=LineJoin.Round;g.DrawLines(road,line.ToArray());}}
    using(Pen approach=new Pen(Color.FromArgb(220,207,180,255),2)){approach.DashStyle=DashStyle.Dash;
     if(Current!=null&&RoadGeometry.Distance(RoadGeometry.FromPosition(Current),route.Projection)>8)g.DrawLine(approach,RouteScreen(RoadGeometry.FromPosition(Current),field,left,top,span),RouteScreen(route.Projection,field,left,top,span));
     g.DrawLine(approach,RouteScreen(route.Points[route.Points.Length-1],field,left,top,span),RouteScreen(route.Target,field,left,top,span));

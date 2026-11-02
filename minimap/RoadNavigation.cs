@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 namespace ScumPositionProbe {
+ public enum TravelMode { Car, Foot }
  public static class RoadGeometry {
   public const double Width=(MapMath.Left-MapMath.Right)/100,Height=(MapMath.Top-MapMath.Bottom)/100;
   public static PointF FromPosition(Position p){return new PointF((float)MapMath.NormX(p.X),(float)MapMath.NormY(p.Y));}
@@ -13,9 +14,10 @@ namespace ScumPositionProbe {
  }
  public sealed class RoadRoute {
   public PointF Origin,Target;public PointF[] Points;public string TargetId,TargetName;public int Segment;public PointF Projection;
-  public double Remaining,Deviation;public bool Arrived;
+  public double Remaining,Deviation;public bool Arrived,DirectFoot;public TravelMode Mode;
   public void Update(PointF current){
    if(RoadGeometry.Distance(current,Target)<=30){Arrived=true;Remaining=0;return;}
+   if(DirectFoot){PointF foot;RoadGeometry.Project(current,Origin,Target,out foot);Deviation=RoadGeometry.Distance(current,foot);Projection=current;Segment=0;Remaining=RoadGeometry.Distance(current,Target);return;}
    double nearest=Double.PositiveInfinity;int best=Segment;PointF projected=Points[Math.Min(Segment,Points.Length-1)];
    for(int i=Math.Max(0,Segment-3);i<Points.Length-1;i++){
     PointF q;RoadGeometry.Project(current,Points[i],Points[i+1],out q);double d=RoadGeometry.Distance(current,q);
@@ -58,14 +60,24 @@ namespace ScumPositionProbe {
    }
    return graph;
   }
-  bool CrossesWater(PointF a,PointF b){
-   if(water==null)return false;double length=RoadGeometry.Distance(a,b);if(length<15)return false;int steps=Math.Max(1,(int)Math.Ceiling(length/5));double wet=0;
-   for(int i=0;i<=steps;i++){double t=(double)i/steps;int x=Math.Max(0,Math.Min(waterWidth-1,(int)((a.X+(b.X-a.X)*t)*waterWidth))),y=Math.Max(0,Math.Min(waterHeight-1,(int)((a.Y+(b.Y-a.Y)*t)*waterHeight)));int index=y*waterWidth+x;if((water[index/8]&(1<<(index%8)))!=0){wet+=length/steps;if(wet>=30)return true;}else wet=0;}
+  bool CrossesWater(PointF a,PointF b,double minimumWet=30){
+   if(water==null)return false;double length=RoadGeometry.Distance(a,b);if(length<15&&minimumWet>=30)return false;int steps=Math.Max(1,(int)Math.Ceiling(length/5));double wet=0;
+   for(int i=0;i<=steps;i++){double t=(double)i/steps;int x=Math.Max(0,Math.Min(waterWidth-1,(int)((a.X+(b.X-a.X)*t)*waterWidth))),y=Math.Max(0,Math.Min(waterHeight-1,(int)((a.Y+(b.Y-a.Y)*t)*waterHeight)));int index=y*waterWidth+x;if((water[index/8]&(1<<(index%8)))!=0){wet+=length/steps;if(wet>=minimumWet)return true;}else wet=0;}
    return false;
   }
   Dictionary<int,Snap> Nearest(PointF point){Dictionary<int,Snap> candidates=new Dictionary<int,Snap>();for(int i=0;i<Edges.Length;i++){Edge e=Edges[i];PointF q;RoadGeometry.Project(point,Nodes[e.A],Nodes[e.B],out q);double distance=RoadGeometry.Distance(point,q);int component=components[e.A];Snap best;if(distance<=1200&&(!candidates.TryGetValue(component,out best)||distance<best.Distance)&&!CrossesWater(point,q))candidates[component]=new Snap{Edge=i,Point=q,Distance=distance};}return candidates;}
-  public RoadRoute Find(PointF from,HubMarker marker){
-   PointF to=new PointF((float)marker.X,(float)marker.Y);Dictionary<int,Snap> starts=Nearest(from),ends=Nearest(to);Snap start=null,end=null;double approach=Double.PositiveInfinity;
+  public RoadRoute Find(PointF from,HubMarker marker,TravelMode mode=TravelMode.Car){
+   PointF to=new PointF((float)marker.X,(float)marker.Y);
+   // Nearby destinations use a walking guide. Only do this with a known water
+   // mask, and check the entire direct leg before considering road approaches.
+   if(mode==TravelMode.Foot&&water!=null&&!CrossesWater(from,to,1)){
+    RoadRoute foot=new RoadRoute{Origin=from,Target=to,TargetId=marker.Id,TargetName=marker.Name,Points=new PointF[]{from,to},Projection=from,DirectFoot=true,Mode=mode};foot.Update(from);return foot;
+   }
+   if(mode==TravelMode.Foot&&water!=null){
+    PointF[] trail=FootPath(from,to);
+    if(trail!=null){RoadRoute foot=new RoadRoute{Origin=from,Target=to,TargetId=marker.Id,TargetName=marker.Name,Points=trail,Projection=from,Mode=mode};foot.Update(from);return foot;}
+   }
+   Dictionary<int,Snap> starts=Nearest(from),ends=Nearest(to);Snap start=null,end=null;double approach=Double.PositiveInfinity;
    if(starts.Count==0||ends.Count==0)throw new Exception("Нет подхода по суше к дороге в пределах 1,2 км.");
    foreach(KeyValuePair<int,Snap> candidate in starts){Snap finish;if(ends.TryGetValue(candidate.Key,out finish)&&candidate.Value.Distance+finish.Distance<approach){start=candidate.Value;end=finish;approach=start.Distance+end.Distance;}}
    if(start==null)throw new Exception("Дорожного соединения нет. Прямой маршрут через воду не строится.");
@@ -85,7 +97,22 @@ namespace ScumPositionProbe {
    // Remove zero-length joins while preserving all actual road bends.
    for(int i=line.Count-1;i>0;i--)if(RoadGeometry.Distance(line[i-1],line[i])<.05)line.RemoveAt(i);
    if(line.Count==1)line.Add(line[0]);
-   RoadRoute route=new RoadRoute{Origin=from,Target=to,TargetId=marker.Id,TargetName=marker.Name,Points=line.ToArray(),Projection=line[0]};route.Update(from);return route;
+   RoadRoute route=new RoadRoute{Origin=from,Target=to,TargetId=marker.Id,TargetName=marker.Name,Points=line.ToArray(),Projection=line[0],Mode=mode};route.Update(from);return route;
+  }
+  PointF[] FootPath(PointF from,PointF to){
+   // Local land search, eight directions, no diagonal corner cutting through water.
+   int w=Math.Min(256,waterWidth),h=Math.Min(256,waterHeight),count=w*h;
+   Func<int,PointF> point=i=>new PointF((i%w+.5f)/w,(i/w+.5f)/h);
+   Func<PointF,int> cell=p=>Math.Max(0,Math.Min(h-1,(int)(p.Y*h)))*w+Math.Max(0,Math.Min(w-1,(int)(p.X*w)));
+   int start=cell(from),end=cell(to);if(CrossesWater(from,point(start),1)||CrossesWater(point(end),to,1))return null;
+   double[] cost=new double[count];int[] previous=new int[count];for(int i=0;i<count;i++){cost[i]=Double.PositiveInfinity;previous[i]=-1;}
+   Heap heap=new Heap();cost[start]=0;heap.Push(start,RoadGeometry.Distance(point(start),point(end)),0);
+   while(heap.Count>0){Heap.Item item=heap.Pop();int a=item.Node;if(item.Cost>cost[a]+1e-7)continue;if(a==end)break;
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){if(dx==0&&dy==0)continue;int x=a%w+dx,y=a/w+dy;if(x<0||y<0||x>=w||y>=h)continue;int b=y*w+x;PointF pa=point(a),pb=point(b);double next=cost[a]+RoadGeometry.Distance(pa,pb);if(next>=cost[b]||CrossesWater(pa,pb,1))continue;cost[b]=next;previous[b]=a;heap.Push(b,next+RoadGeometry.Distance(pb,point(end)),next);}
+   }
+   if(Double.IsInfinity(cost[end]))return null;
+   List<PointF> raw=new List<PointF>();raw.Add(to);for(int n=end;n>=0;n=previous[n])raw.Add(point(n));raw.Add(from);raw.Reverse();
+   List<PointF> smooth=new List<PointF>();int at=0;smooth.Add(from);while(at<raw.Count-1){int next=raw.Count-1;while(next>at+1&&CrossesWater(raw[at],raw[next],1))next--;smooth.Add(raw[next]);at=next;}return smooth.ToArray();
   }
   sealed class Heap {
    public struct Item {public int Node;public double Score,Cost;}
@@ -98,6 +125,7 @@ namespace ScumPositionProbe {
   readonly Task<RoadGraph> graph=Task.Run(()=>RoadGraph.Load());readonly Func<DateTime> now;int version;DateTime replanAt=DateTime.MinValue;PointF lastReplan;HubMarker target;internal Task BackgroundPlanning;
   public NavigationSession():this(()=>DateTime.UtcNow){}
   internal NavigationSession(Func<DateTime> clock){now=clock;}
+  public TravelMode Mode=TravelMode.Car;
   public RoadRoute Route;public bool Busy;public string Status="Выбери метку HUB и проложи маршрут.";public event EventHandler Changed;
   public string GoalId{get{return target==null?null:target.Id;}}
   public void RefreshTarget(HubMarker marker,Position position){
@@ -109,16 +137,16 @@ namespace ScumPositionProbe {
   public void Cancel(string message){version++;Busy=false;Route=null;target=null;Status=message;Notify();}
   public async Task Plan(Position position,HubMarker marker){
    if(RoadGeometry.Distance(RoadGeometry.FromPosition(position),new PointF((float)marker.X,(float)marker.Y))<=30){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}
-   int own=++version;Busy=true;target=new HubMarker{Id=marker.Id,Name=marker.Name,X=marker.X,Y=marker.Y};HubMarker selected=target;
-   replanAt=now();lastReplan=RoadGeometry.FromPosition(position);PointF start=lastReplan;Status=Route==null?"Строю маршрут по дорогам…":"Перестраиваю маршрут…";Notify();
-   try{RoadGraph roads=await graph;RoadRoute route=await Task.Run(()=>roads.Find(start,selected));if(own!=version)return;Route=route;if(route.Arrived){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}Status="До цели: "+RoadGeometry.Metres(route.Remaining)+" · "+marker.Name;}
+   int own=++version;Busy=true;target=new HubMarker{Id=marker.Id,Name=marker.Name,X=marker.X,Y=marker.Y};HubMarker selected=target;TravelMode selectedMode=Mode;
+   replanAt=now();lastReplan=RoadGeometry.FromPosition(position);PointF start=lastReplan;Status=Route==null?"Строю маршрут…":"Перестраиваю маршрут…";Notify();
+   try{RoadGraph roads=await graph;RoadRoute route=await Task.Run(()=>roads.Find(start,selected,selectedMode));if(own!=version)return;Route=route;if(route.Arrived){Cancel("Ты прибыл к метке «"+marker.Name+"».");return;}Status=(route.Mode==TravelMode.Foot?"Пешком · ":"На машине · ")+"До цели: "+RoadGeometry.Metres(route.Remaining)+" · "+marker.Name;}
    catch(Exception ex){if(own==version){Route=null;Status=ex.Message;}}
    finally{if(own==version){Busy=false;Notify();}}
   }
   public void Update(Position position){
    if(Route==null)return;PointF current=RoadGeometry.FromPosition(position);Route.Update(current);
    if(Route.Arrived){Cancel("Ты прибыл к метке «"+Route.TargetName+"».");return;}
-   if(!Busy)Status="До цели: "+RoadGeometry.Metres(Route.Remaining)+" · "+Route.TargetName;Notify();
+   if(!Busy)Status=(Route.Mode==TravelMode.Foot?"Пешком · ":"На машине · ")+"До цели: "+RoadGeometry.Metres(Route.Remaining)+" · "+Route.TargetName;Notify();
    if(!Busy&&Route.Deviation>60&&(now()-replanAt).TotalSeconds>=2&&RoadGeometry.Distance(current,lastReplan)>15&&target!=null)BackgroundPlanning=Plan(position,target);
   }
  }

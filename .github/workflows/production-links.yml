@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: visible HUB code, standard unclipped checkbox and automatic tracking default
+# Approved release: driving and walking navigation, visible marker shortcuts and labels above points
 on:
   push:
     branches: [scum-hub-migration]
