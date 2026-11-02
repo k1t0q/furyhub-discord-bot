@@ -22,6 +22,13 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   DateTime presenceNow=new DateTime(2026,11,2,0,0,0,DateTimeKind.Utc);
+   Check(AllyLive.Visible(presenceNow,presenceNow.AddSeconds(7))&&!AllyLive.Visible(presenceNow,presenceNow.AddMilliseconds(7001)),"ally hides after seven seconds");
+   using(HubClient presenceHub=new HubClient())using(AllyLive presence=new AllyLive(presenceHub)){
+    DateTime sampleNow=presenceNow;presence.UtcNow=()=>sampleNow;Position stationary=new Position{X=100,Y=100};presence.Observe(stationary,0);long initial=presence.Revision;
+    sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary samples throttled");sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial+1,"fresh stationary samples confirm presence every two seconds");
+    sampleNow=sampleNow.AddSeconds(8);Check(presence.Revision==initial+1,"no confirmation without a newly observed coordinate");
+   }results.Add("PASS seven-second ally expiry and fresh stationary confirmation throttling");
    ZoomKeys zoom=new ZoomKeys();Check(zoom.Update(true,true,false,0)==1&&zoom.Update(true,true,false,25)==0&&zoom.Update(true,true,false,400)==1,"zoom press and delayed repeat");
    Check(zoom.Update(false,true,false,425)==0&&zoom.Update(true,false,true,450)==-1,"focus/menu guard and zoom out");
    Check(zoom.Update(true,true,true,500)==0&&zoom.Update(true,false,false,525)==0&&zoom.Update(true,true,false,550)==1,"opposing arrows and release reset");results.Add("PASS keyboard zoom direction, repeat, focus guard and release");

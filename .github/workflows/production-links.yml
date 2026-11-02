@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: quick stash, vehicle, enemy base and marker creation from captured player position
+# Approved release: seven-second ally expiry and fresh stationary position confirmations
 on:
   push:
     branches: [scum-hub-migration]
