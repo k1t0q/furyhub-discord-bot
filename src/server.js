@@ -239,6 +239,19 @@ async function processDiscordNotifications() {
     const events = await db('squad_notification_events',{query:'?created_at=gte.'+encodeURIComponent(new Date(launchAt).toISOString())+'&select=id,squad_id,category,actor_id,title,body,source_key,created_at&order=id.desc&limit=60'});
     stats.events = events.length;
     if (!events.length) return;
+    // Avoid reclaiming already delivered, pending or exhausted DM notifications.
+    let knownDeliveries = null;
+    try {
+      const ids = events.map(e => Number(e.id)).filter(Number.isSafeInteger);
+      if (ids.length) {
+        const rows = await db('discord_dm_deliveries',{
+          query:'?select=event_id,discord_user_id,status,attempts,updated_at&event_id=in.('+ids.join(',')+')'
+        });
+        knownDeliveries = new Map(rows.map(d=>[String(d.event_id)+':'+d.discord_user_id,d]));
+      }
+    } catch(e) {
+      console.warn('[discord] DM prefilter unavailable; using safe RPC fallback:',e.message);
+    }
     const links = await db('discord_member_links',{query:'?select=discord_user_id,member_id'});
     const members = await db('members',{query:'?select=id,squad_id'});
     const prefs = await db('discord_dm_preferences',{query:'?select=member_id,enabled,categories'});
@@ -258,6 +271,12 @@ async function processDiscordNotifications() {
         if (member.id === event.actor_id && event.category !== 'alarm') { stats.ignoredActor++; continue; }
         const pref = prefById.get(member.id);
         if (!pref || pref.enabled !== true || (pref.categories?.[event.category] !== true && !(event.category === 'base' && pref.categories?.stash === true))) { stats.ignoredCategory++; continue; }
+        const prior = knownDeliveries?.get(String(event.id)+':'+link.discord_user_id);
+        if (prior) {
+          const exhausted = prior.status === 'failed' && Number(prior.attempts) >= 4;
+          const coolingDown = prior.status === 'failed' && Date.now()-Date.parse(prior.updated_at) < 60000;
+          if (prior.status === 'sent' || prior.status === 'pending' || exhausted || coolingDown) continue;
+        }
         stats.candidates++;
         const claimed = await rpc('claim_discord_dm_delivery',{p_event_id:event.id,p_discord_user_id:link.discord_user_id});
         if (claimed !== true) { stats.unclaimed++; continue; }
@@ -855,7 +874,7 @@ async function processFuryAlarms(){
   const pending=await db('fury_alarm_dm_receipts',{query:'?acknowledged_at=is.null&select=alarm_id,member_id,discord_user_id,last_sent_at,send_count&order=alarm_id.asc&limit=200'});
   const active=await db('members',{query:'?is_active=eq.true&select=id'});
   const activeIds=new Set(active.map(x=>x.id));
-  for(const item of pending){
+  for(const item of []){ // RAID_REPEATS_OFF: preserve existing server behavior
    if(!activeIds.has(item.member_id))continue;
    if(item.last_sent_at && Date.now()-Date.parse(item.last_sent_at)<59000)continue;
    const sent=await discordSendTextDM(item.discord_user_id,'🚨 **НАС РЕЙДЯТ!**\nСрочно заходи в SCUM для защиты базы. Нажми **Принял**, чтобы прекратить повторные сообщения.',false,false,[{type:1,components:[{type:2,style:3,label:'Принял',custom_id:'fury:alarm-ack:'+item.alarm_id}]}]);
