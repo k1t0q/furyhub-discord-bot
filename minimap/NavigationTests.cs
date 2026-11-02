@@ -22,6 +22,9 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   ZoomKeys zoom=new ZoomKeys();Check(zoom.Update(true,true,false,0)==1&&zoom.Update(true,true,false,25)==0&&zoom.Update(true,true,false,400)==1,"zoom press and delayed repeat");
+   Check(zoom.Update(false,true,false,425)==0&&zoom.Update(true,false,true,450)==-1,"focus/menu guard and zoom out");
+   Check(zoom.Update(true,true,true,500)==0&&zoom.Update(true,false,false,525)==0&&zoom.Update(true,true,false,550)==1,"opposing arrows and release reset");results.Add("PASS keyboard zoom direction, repeat, focus guard and release");
    Position viewer=World(.5f,.5f);double half=500*100/(MapMath.Left-MapMath.Right);
    HubMarker near=Goal(.501f,.5f);near.Id="near";near.Kind="base";
    HubMarker corner=Goal((float)(.5+half*.9),(float)(.5-half*.9));corner.Id="corner";corner.Kind="other";
