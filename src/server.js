@@ -810,16 +810,16 @@ http.createServer(async (req, res) => {
       return;
     }
     // Map confirmation edits the public prompt directly; do not create an ephemeral deferred response.
-    if (interaction.type === InteractionType.MESSAGE_COMPONENT && /^fury:map-(?:yes|no):\d{15,22}$/.test(String(interaction.data?.custom_id||''))) {
+    if (interaction.type === InteractionType.MESSAGE_COMPONENT && /^fury:map-(?:yes|no|kind-(?:stash|car|enemy|other)):\d{15,22}$/.test(String(interaction.data?.custom_id||''))) {
       json(res, 200, { type: 6 }); // DEFERRED_UPDATE_MESSAGE, no extra private "Saving..." message.
       void (async () => {
         try {
           const result = await handle(interaction);
-          if (result?.type === InteractionResponseType.UPDATE_MESSAGE && interaction.data.custom_id.startsWith('fury:map-no:')) {
+          if (result?.type === InteractionResponseType.UPDATE_MESSAGE) {
             const response = await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+interaction.message.id,{
               method:'PATCH',
               headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
-              body:JSON.stringify({content:result.data.content,components:[]}),
+              body:JSON.stringify({content:result.data.content,components:result.data.components||[]}),
               signal:AbortSignal.timeout(8000)
             });
             if(!response.ok)console.error('[discord] Map cancel edit failed:',response.status);
