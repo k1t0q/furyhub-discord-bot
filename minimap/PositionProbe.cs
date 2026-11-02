@@ -124,7 +124,7 @@ namespace ScumPositionProbe {
    Button logs=new Button();logs.SetBounds(380,408,190,42);logs.Text="Открыть журнал";StyleButton(logs);logs.Click+=delegate{OpenLogs();};Controls.Add(logs);
    top.SetBounds(20,466,550,25);top.Text="Поверх остальных окон";top.Checked=false;TopMost=false;top.CheckedChanged+=delegate{TopMost=top.Checked;};Controls.Add(top);
    MakeLabel("Координаты остаются на ПК. HUB подключается только для чтения меток.\r\nБуфер заменяется координатами; закрой чат и меню игры.",20,504,550,50,9,false);
-   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();BuildArrowSizes();
+   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();BuildArrowSizes();BuildQuickMarkers();
    timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();layoutSave.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
   }
   void Place(Control c,int x,int y,int w,int h){c.SetBounds(x,y,w,h);c.Visible=true;}
@@ -212,6 +212,32 @@ namespace ScumPositionProbe {
    RebuildNavigationChoices();
    string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.Markers.Find(m=>m.Id==activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
    UpdateNavigationState();
+  }
+  bool creatingMarker;
+  void BuildQuickMarkers(){
+   ClientSize=new Size(700,880);MinimumSize=MaximumSize=new Size(716,919);state.Top=834;
+   MakeLabel("ДОБАВИТЬ В ТЕКУЩЕЙ ПОЗИЦИИ",24,752,650,22,9,true);
+   string[] captions={"Схрон","Машина","Вражеская база","Метка"},categories={"stash","car","base","other"};
+   for(int i=0;i<4;i++){string category=categories[i],caption=captions[i];Button add=new Button();add.Text=caption;add.SetBounds(24+i*164,780,149,34);StyleButton(add);Controls.Add(add);add.Click+=async delegate{await AddQuickMarker(category,caption);};}
+  }
+  async System.Threading.Tasks.Task AddQuickMarker(string category,string caption){
+   if(creatingMarker)return;if(hub==null){state.Text="Сначала подключись к HUB.";return;}
+   if(previous==null||lastSuccess<0||clock.ElapsedMilliseconds-lastSuccess>5000){state.Text="Нужна свежая позиция: включи отслеживание и вернись в игру, затем открой добавление.";return;}
+   Position fixedPosition=new Position{X=previous.X,Y=previous.Y};HubClient current=hub;int generation=hubGeneration;creatingMarker=true;
+   try{using(Form dialog=new Form()){
+    dialog.Text="Добавить: "+caption;dialog.ClientSize=new Size(420,205);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;dialog.MaximizeBox=dialog.MinimizeBox=false;dialog.StartPosition=FormStartPosition.CenterParent;dialog.BackColor=BackColor;dialog.ForeColor=ForeColor;dialog.Font=new Font("Segoe UI",9);
+    Label location=new Label{Text="Точка зафиксирована · "+MapMath.Sector(MapMath.NormX(fixedPosition.X),MapMath.NormY(fixedPosition.Y))+"\r\nX="+fixedPosition.X.ToString("0",CultureInfo.InvariantCulture)+"  Y="+fixedPosition.Y.ToString("0",CultureInfo.InvariantCulture),Location=new Point(18,14),Size=new Size(384,42)};dialog.Controls.Add(location);
+    dialog.Controls.Add(new Label{Text="Название",Location=new Point(18,65),Size=new Size(384,20)});
+    TextBox name=new TextBox{Text=caption,MaxLength=70,Location=new Point(18,90),Size=new Size(384,28)};dialog.Controls.Add(name);
+    Button save=new Button{Text="Сохранить",Location=new Point(18,145),Size=new Size(184,36)},cancel=new Button{Text="Отмена",DialogResult=DialogResult.Cancel,Location=new Point(218,145),Size=new Size(184,36)};StyleButton(save);StyleButton(cancel);dialog.Controls.Add(save);dialog.Controls.Add(cancel);dialog.AcceptButton=save;dialog.CancelButton=cancel;
+    save.Click+=delegate{if(String.IsNullOrWhiteSpace(name.Text)){name.Focus();return;}dialog.DialogResult=DialogResult.OK;};dialog.Shown+=delegate{name.SelectAll();name.Focus();};
+    if(dialog.ShowDialog(this)!=DialogResult.OK)return;if(current!=hub||generation!=hubGeneration){state.Text="Подключение HUB изменилось. Открой добавление заново.";return;}
+    state.Text="Сохраняю точку…";
+    try{await current.CreateMarker(category,name.Text,fixedPosition);}catch(HubExpiredException){throw;}catch(Exception ex){state.Text="Связь с HUB: "+ex.Message+" Обнови метки перед повторным добавлением.";return;}
+    if(IsDisposed||current!=hub||generation!=hubGeneration)return;
+    // The post is the sole source of the marker, so a failed refresh cannot duplicate it.
+    await RefreshHub();state.Text="Сохранено: "+name.Text.Trim()+". "+(mini.SyncStatus.StartsWith("HUB: нет связи")?"Нажми «Обновить метки», когда появится связь.":"Точка добавлена в HUB.");
+   }}catch(Exception ex){if(!IsDisposed)state.Text=ex.Message;}finally{creatingMarker=false;}
   }
   void BuildArrowSizes(){
    ClientSize=new Size(700,800);MinimumSize=MaximumSize=new Size(716,839);state.Top=754;
@@ -330,6 +356,7 @@ namespace ScumPositionProbe {
    Require(MapMath.DeltaAngle(350,10)==20&&MapMath.DeltaAngle(10,350)==-20,"Heading wraps");lines.Add("PASS map bounds, sectors and short rotation interpolation");
    HubSnapshot snapshot=HubClient.Parse("{\"member\":{\"nick\":\"tester\"},\"posts\":[],\"markers\":[{\"id\":1,\"x\":0.2,\"y\":0.3,\"name\":\"Base\",\"type\":\"base\"},{\"x\":999,\"y\":0.1}]}");Require(snapshot.Markers.Count==1&&snapshot.Markers[0].Name=="Base","HUB snapshot parser");lines.Add("PASS HUB marker validation");
    MarkerMergeTests.Run();lines.Add("PASS HUB linked markers, orphan filtering, post coordinates, titles and deletion");
+   HubClient.TestCreateMarker();lines.Add("PASS four marker types, coordinate round-trip, invalid input, access revocation and no write retries");
    HubClient.TestProtocol();lines.Add("PASS read-only HUB requests, marker additions/deletions and session expiry");
    Require(MapMath.Direction(0)=="Север"&&MapMath.Direction(30)=="СВ"&&MapMath.Direction(180)=="Юг"&&MapMath.Direction(225)=="ЮЗ"&&MapMath.Direction(359)=="Север","Compass directions");lines.Add("PASS compass labels and wraparound");
    Require(MapVisibility.ShouldShow(true,false,true)&&!MapVisibility.ShouldShow(true,false,false)&&!MapVisibility.ShouldShow(false,false,true)&&!MapVisibility.ShouldShow(true,true,true),"Overlay focus/manual/menu visibility");lines.Add("PASS overlay focus, manual hide and inventory hide");

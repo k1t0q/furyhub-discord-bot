@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: concise download description without features and with ordered function keys
+# Approved release: quick stash, vehicle, enemy base and marker creation from captured player position
 on:
   push:
     branches: [scum-hub-migration]
