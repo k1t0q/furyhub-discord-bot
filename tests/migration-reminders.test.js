@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {queueMigrationReminders} from '../src/migration-reminders.js';
-test('D1 reminders queue Moscow 15:00 presence, protect warning and stash expiry exactly once',async()=>{
+test('D1 reminders queue Moscow 15:00 presence and stash expiry once, without removed protect warnings',async()=>{
  const now=new Date('2026-10-30T12:00:00Z'),events=[];
  const db=async(t,o={})=>{
  if(t==='squad_notification_events'){
@@ -13,7 +13,7 @@ test('D1 reminders queue Moscow 15:00 presence, protect warning and stash expiry
  if(t==='squad_place_posts')return [{id:2,squad_id:'s',created_at:new Date(+now-12*86400000).toISOString(),map_marker_name:'Test stash'},{id:3,squad_id:'s',created_at:'2020-01-01T00:00:00Z'}];
  return [];
  };
- assert.equal(await queueMigrationReminders(db,now),3);
+ assert.equal(await queueMigrationReminders(db,now),2);
  assert.equal(await queueMigrationReminders(db,now),0);
- assert.deepEqual(events.map(e=>e.category),['presence','protect','stash']);
+ assert.deepEqual(events.map(e=>e.category),['presence','stash']);
 });

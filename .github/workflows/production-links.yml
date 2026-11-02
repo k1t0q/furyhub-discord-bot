@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: ally heartbeat, silent connection recovery and server-confirmed status
+# Approved release: ally reconnection build; align reminder test with removed protect warning
 on:
   push:
     branches: [scum-hub-migration]
