@@ -110,7 +110,7 @@ namespace ScumPositionProbe {
   public ProbeForm(){
    Text="SCUM HUB";ClientSize=new Size(1010,820);MinimumSize=new Size(1026,859);AutoScroll=false;AutoScaleMode=AutoScaleMode.Dpi;
    DoubleBuffered=true;SetStyle(ControlStyles.OptimizedDoubleBuffer|ControlStyles.AllPaintingInWmPaint,true);
-   using(Stream icon=typeof(ProbeForm).Assembly.GetManifestResourceStream("ScumPositionProbe.SH.ico")){if(icon!=null)Icon=new Icon(icon);}
+   if(!UiTest)using(Stream icon=typeof(ProbeForm).Assembly.GetManifestResourceStream("ScumPositionProbe.SH.ico")){if(icon!=null)Icon=new Icon(icon);}
    BackColor=Color.FromArgb(12,17,20);ForeColor=Color.FromArgb(235,239,239);Font=new Font("Segoe UI",10);
    MakeLabel("SCUM HUB · MINIMAP",20,15,550,35,17,true);
    MakeLabel("Без Ctrl · позиция из буфера / метки HUB: 5 секунд",20,54,550,25,10,false);
@@ -158,7 +158,8 @@ namespace ScumPositionProbe {
    CompactLabel(settingsPanel,"ПОЛОЖЕНИЕ НА ЭКРАНЕ",0,246,472,22,true);CompactLabel(settingsPanel,"X",0,287,24,24);CompactLabel(settingsPanel,"Y",245,287,24,24);MoveTo(mapX,settingsPanel,28,280,192,29);MoveTo(mapY,settingsPanel,273,280,199,29);MoveTo(button("Сбросить положение"),settingsPanel,0,325,472,34);
    CompactLabel(settingsPanel,"ОТСЛЕЖИВАНИЕ",0,385,472,22,true);CompactLabel(settingsPanel,"Режим",0,427,180,24);MoveTo(mode,settingsPanel,210,420,262,29);CompactLabel(settingsPanel,"Копирование координат",0,474,290,25);MoveTo(keyPicker,settingsPanel,316,466,156,32);MoveTo(autoHide,settingsPanel,0,519,250,28);MoveTo(button("Настроить север · F11"),settingsPanel,258,514,214,34);
    MoveTo(state,this,24,735,472,32);state.Font=new Font("Segoe UI",8);CompactLabel(this,"↑↓ масштаб   F7 карта   F8 пауза   F9 стоп",24,777,472,20).Font=new Font("Segoe UI",8);
-   foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){Button b=c as Button;if(b!=null)CompactButton(b,b==toggle);ComboBox combo=c as ComboBox;if(combo!=null){combo.BackColor=Color.FromArgb(21,29,35);combo.ForeColor=ForeColor;combo.FlatStyle=FlatStyle.Flat;}}
+   foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){Button b=c as Button;if(b!=null)CompactButton(b,b==toggle);ComboBox combo=c as ComboBox;if(combo!=null){combo.BackColor=Color.FromArgb(21,29,35);combo.ForeColor=ForeColor;combo.FlatStyle=FlatStyle.Flat;}if(c is NumericUpDown){c.BackColor=Color.FromArgb(17,25,30);c.ForeColor=ForeColor;}}
+   hubNick.BackColor=hubCode.BackColor=Color.FromArgb(17,25,30);hubNick.ForeColor=hubCode.ForeColor=ForeColor;
    SelectCompactTab(false);UpdateConnectionLayout();
   }
   internal void TestCompactUI(){
