@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: compact tabs with dark inputs and platform-independent UI smoke checks
+# Approved release: rounded controls, dark title bars and 12px gap between Home and Settings tabs
 on:
   push:
     branches: [scum-hub-migration]
