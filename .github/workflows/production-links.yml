@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: create cars as native blue vehicle markers in the Transport category
+# Approved release: dark selectors, bounded destination list and empty-state guidance; verified on Windows
 on:
   push:
     branches: [scum-hub-migration]
