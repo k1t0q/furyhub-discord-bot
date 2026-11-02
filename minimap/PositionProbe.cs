@@ -153,25 +153,46 @@ namespace ScumPositionProbe {
    }}
   }
   readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new Button(),navigationCancel=new Button();readonly Label navigationState=new Label();
-  sealed class NavigationChoice {public HubMarker Marker;public override string ToString(){return Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y);}}
+  sealed class NavigationChoice {public HubMarker Marker;public string Header;public override string ToString(){return Marker==null?Header:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y);}}
+  bool navigationListUpdating;int lastNavigationIndex=-1;
+  static int NavigationGroup(HubMarker marker){return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
+  static List<NavigationChoice> GroupNavigationMarkers(List<HubMarker> markers){
+   string[] names={"СХРОНЫ","БАЗЫ","ДРУГОЕ"};List<NavigationChoice> rows=new List<NavigationChoice>();
+   for(int group=0;group<3;group++){List<HubMarker> sorted=markers.FindAll(m=>NavigationGroup(m)==group);if(sorted.Count==0)continue;sorted.Sort((a,b)=>{int n=StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);return n!=0?n:StringComparer.Ordinal.Compare(a.Id,b.Id);});rows.Add(new NavigationChoice{Header=names[group]});foreach(HubMarker marker in sorted)rows.Add(new NavigationChoice{Marker=marker});}
+   return rows;
+  }
+  void NavigationSelectionChanged(){
+   if(navigationListUpdating)return;int index=navigationGoal.SelectedIndex;NavigationChoice row=navigationGoal.SelectedItem as NavigationChoice;
+   if(row!=null&&row.Marker==null){int step=index<lastNavigationIndex?-1:1;int next=index+step;while(next>=0&&next<navigationGoal.Items.Count&&((NavigationChoice)navigationGoal.Items[next]).Marker==null)next+=step;
+    if(next<0||next>=navigationGoal.Items.Count){next=index-step;while(next>=0&&next<navigationGoal.Items.Count&&((NavigationChoice)navigationGoal.Items[next]).Marker==null)next-=step;}
+    navigationGoal.SelectedIndex=next;return;
+   }lastNavigationIndex=index;UpdateNavigationState();
+  }
+  void DrawNavigationChoice(object sender,DrawItemEventArgs e){
+   if(e.Index<0)return;NavigationChoice row=(NavigationChoice)navigationGoal.Items[e.Index];bool header=row.Marker==null;e.DrawBackground();
+   if(header){using(SolidBrush b=new SolidBrush(Color.FromArgb(24,33,38)))e.Graphics.FillRectangle(b,e.Bounds);}
+   bool closed=(e.State&DrawItemState.ComboBoxEdit)!=0;Rectangle bounds=e.Bounds;bounds.X+=header||closed?6:16;bounds.Width-=header||closed?10:20;
+   using(Font font=new Font(navigationGoal.Font,header?FontStyle.Bold:FontStyle.Regular)){Color color=header?Color.FromArgb(245,132,136):((e.State&DrawItemState.Selected)!=0?SystemColors.HighlightText:navigationGoal.ForeColor);TextRenderer.DrawText(e.Graphics,row.ToString(),font,bounds,color,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);}
+   if(!header)e.DrawFocusRectangle();
+  }
   void BuildNavigationUI(){
    ClientSize=new Size(700,720);MinimumSize=MaximumSize=new Size(716,759);state.Top=674;
    MakeLabel("НАВИГАТОР",24,549,311,22,10,true);
-   navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownWidth=580;navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.SelectedIndexChanged+=delegate{UpdateNavigationState();};Controls.Add(navigationGoal);
+   navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownWidth=580;navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.DrawMode=DrawMode.OwnerDrawFixed;navigationGoal.ItemHeight=23;navigationGoal.DrawItem+=DrawNavigationChoice;navigationGoal.SelectedIndexChanged+=delegate{NavigationSelectionChanged();};Controls.Add(navigationGoal);
    navigationStart.Text="Проложить маршрут";navigationStart.SetBounds(24,617,192,34);StyleButton(navigationStart);Controls.Add(navigationStart);
    navigationCancel.Text="Отменить";navigationCancel.SetBounds(228,617,107,34);StyleButton(navigationCancel);Controls.Add(navigationCancel);
    navigationState.SetBounds(385,617,280,50);navigationState.Font=new Font("Segoe UI",9);Controls.Add(navigationState);
-   navigationStart.Click+=async delegate{NavigationChoice choice=navigationGoal.SelectedItem as NavigationChoice;if(choice==null)return;if(mini.Current==null){navigationState.Text="Сначала включи отслеживание и получи позицию в игре.";return;}await mini.Navigation.Plan(mini.Current,choice.Marker);mini.Navigation.Update(mini.Current);};
+   navigationStart.Click+=async delegate{NavigationChoice choice=navigationGoal.SelectedItem as NavigationChoice;if(choice==null||choice.Marker==null)return;if(mini.Current==null){navigationState.Text="Сначала включи отслеживание и получи позицию в игре.";return;}await mini.Navigation.Plan(mini.Current,choice.Marker);mini.Navigation.Update(mini.Current);};
    navigationCancel.Click+=delegate{mini.Navigation.Cancel("Маршрут отменён.");};
    mini.Navigation.Changed+=delegate{if(!IsDisposed){UpdateNavigationState();mini.Invalidate();}};
    UpdateNavigationState();
   }
-  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;navigationStart.Enabled=navigationGoal.SelectedIndex>=0&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;}
+  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;}
   void UpdateNavigationMarkers(){
-   NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null?null:previousChoice.Marker.Id;
-   navigationGoal.BeginUpdate();navigationGoal.Items.Clear();List<HubMarker> sorted=new List<HubMarker>(mini.Markers);sorted.Sort((a,b)=>StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name));
-   foreach(HubMarker marker in sorted){int i=navigationGoal.Items.Add(new NavigationChoice{Marker=marker});if(marker.Id==selected)navigationGoal.SelectedIndex=i;}
-   if(navigationGoal.SelectedIndex<0&&navigationGoal.Items.Count>0)navigationGoal.SelectedIndex=0;navigationGoal.EndUpdate();
+   NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
+   navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.Markers)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected)navigationGoal.SelectedIndex=i;}}
+    if(navigationGoal.SelectedIndex<0&&first>=0)navigationGoal.SelectedIndex=first;lastNavigationIndex=navigationGoal.SelectedIndex;
+   }finally{navigationGoal.EndUpdate();navigationListUpdating=false;}
    string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.Markers.Find(m=>m.Id==activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
    UpdateNavigationState();
   }
