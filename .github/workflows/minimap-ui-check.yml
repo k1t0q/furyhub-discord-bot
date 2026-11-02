@@ -42,4 +42,5 @@ jobs:
         shell: pwsh
         run: |
           $process = Start-Process .\\SCUM_HUB_MiniMap.exe -ArgumentList '--ui-test' -Wait -PassThru
+          if (Test-Path ui-test.txt) { Get-Content ui-test.txt }
           if ($process.ExitCode -ne 0) { throw "Windows UI check failed: $($process.ExitCode)" }
