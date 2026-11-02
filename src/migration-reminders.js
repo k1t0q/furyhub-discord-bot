@@ -16,12 +16,6 @@ export async function queueMigrationReminders(db,now=new Date()){
  }
  const protects=await db('protect_updates',{query:'?select=id,squad_id,updated_at,effective_at&order=updated_at.desc&limit=1000'});
  const latest=new Map();for(const p of protects)if(!latest.has(p.squad_id))latest.set(p.squad_id,p);
- for(const p of latest.values()){
-   const end=Date.parse(p.effective_at||p.updated_at)+32400000,remaining=end-ms;
-   if(!Number.isFinite(remaining)||remaining<=0)continue;
-   const stage=remaining<=900000?15:remaining<=3600000?60:null;
-   if(stage)await queue(p.squad_id,'protect','ПРОТЕКТ СКОРО СПАДЁТ','До окончания протекта осталось не больше '+stage+' минут.','protect-warning:'+p.id+':'+stage);
- }
  const posts=await db('squad_place_posts',{query:'?kind=eq.stash&select=id,squad_id,created_at,stash_checked_at,map_marker_name&limit=1000'});
  for(const p of posts){
    const days=Math.ceil((Date.parse(p.stash_checked_at||p.created_at)+14*dayMs-ms)/dayMs);
