@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: seven-second ally expiry and fresh stationary position confirmations
+# Approved release: refresh nearby visible stash timers using a distance-sorted picker
 on:
   push:
     branches: [scum-hub-migration]

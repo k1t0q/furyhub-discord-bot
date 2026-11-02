@@ -98,11 +98,41 @@ namespace ScumPositionProbe {
     if(result==null||(result.TryGetValue("error",out error)&&error!=null)||!result.TryGetValue("data",out data)||!(data is object[])||((object[])data).Length!=1)throw new Exception("HUB не подтвердил сохранение. Обнови метки перед повтором.");
    }
   }
+  public static bool CanRefreshStash(HubMarker marker){long id;return marker!=null&&marker.Kind=="stash"&&marker.Id!=null&&marker.Id.StartsWith("stash-post-",StringComparison.Ordinal)&&Int64.TryParse(marker.Id.Substring(11),NumberStyles.None,CultureInfo.InvariantCulture,out id)&&id>0;}
+  public async Task RefreshStash(HubMarker marker){
+   if(!CanRefreshStash(marker))throw new ArgumentException("Выбери схрон с таймером HUB.");
+   long id=Int64.Parse(marker.Id.Substring(11),CultureInfo.InvariantCulture);await EnsureSession(CancellationToken.None);
+   var body=new Dictionary<string,object>{{"rpc","refresh_stash"},{"args",new Dictionary<string,object>{{"p_post_id",id}}}};
+   using(HttpResponseMessage response=await client.PostAsync("api/legacy",new StringContent(json.Serialize(body),Encoding.UTF8,"application/json"))){
+    if(response.StatusCode==HttpStatusCode.Unauthorized||response.StatusCode==HttpStatusCode.Forbidden)throw new HubExpiredException();
+    if(!response.IsSuccessStatusCode)throw new Exception("Не удалось обновить схрон (HTTP "+(int)response.StatusCode+").");
+    var result=json.DeserializeObject(await response.Content.ReadAsStringAsync()) as Dictionary<string,object>;object error,data;
+    if(result==null||(result.TryGetValue("error",out error)&&error!=null)||!result.TryGetValue("data",out data)||!(data is bool)||!(bool)data)throw new Exception("HUB не подтвердил обновление схрона. Обнови метки и проверь таймер.");
+   }
+  }
   public async Task<HubSnapshot> Snapshot(){await EnsureSession(CancellationToken.None);using(HttpResponseMessage r=await client.GetAsync("api/member/snapshot")){
    if(r.StatusCode==HttpStatusCode.Unauthorized||r.StatusCode==HttpStatusCode.Forbidden)throw new HubExpiredException();
    if(!r.IsSuccessStatusCode)throw new Exception("HUB временно недоступен (HTTP "+(int)r.StatusCode+").");
    string text=await r.Content.ReadAsStringAsync();return Parse(text);
   }}
+  public static void TestRefreshStash(){
+   HubMarker stash=new HubMarker{Id="stash-post-1793612345678901",Kind="stash",Name="Схрон"};var handler=new StashHandler();
+   using(HubClient h=new HubClient(handler)){
+    foreach(HubMarker invalid in new HubMarker[]{null,new HubMarker{Id="base-post-17",Kind="base"},new HubMarker{Id="other-post-17",Kind="other"},new HubMarker{Id="stash-post-17",Kind="base"},new HubMarker{Id="stash-post-0",Kind="stash"},new HubMarker{Id="stash-post--1",Kind="stash"},new HubMarker{Id="stash-post-not-id",Kind="stash"},new HubMarker{Id="plain-id",Kind="stash"}}){bool denied=false;try{h.RefreshStash(invalid).GetAwaiter().GetResult();}catch(ArgumentException){denied=true;}if(!denied)throw new Exception("Non-stash accepted for refresh");}if(handler.Count!=0)throw new Exception("Invalid stash reached API");
+    h.RefreshStash(stash).GetAwaiter().GetResult();if(handler.Count!=1)throw new Exception("Stash refresh missing");
+    handler.Status=HttpStatusCode.Unauthorized;bool expired=false;try{h.RefreshStash(stash).GetAwaiter().GetResult();}catch(HubExpiredException){expired=true;}if(!expired)throw new Exception("Expired stash session accepted");
+    handler.Status=HttpStatusCode.OK;foreach(string response in new string[]{"{\"data\":null,\"error\":\"record_not_found\"}","{\"data\":false,\"error\":null}"}){handler.Response=response;int count=handler.Count;bool denied=false;try{h.RefreshStash(stash).GetAwaiter().GetResult();}catch(Exception){denied=true;}if(!denied||handler.Count!=count+1)throw new Exception("Unconfirmed stash refresh accepted or retried");}
+   }
+  }
+  sealed class StashHandler:HttpMessageHandler{
+   public int Count;public HttpStatusCode Status=HttpStatusCode.OK;public string Response="{\"data\":true,\"error\":null}";
+   protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancel){
+    Count++;if(request.Method!=HttpMethod.Post||request.RequestUri.AbsolutePath!="/api/legacy"||!request.Headers.Contains("Origin"))throw new Exception("Wrong stash endpoint");
+    var body=new JavaScriptSerializer().DeserializeObject(await request.Content.ReadAsStringAsync()) as Dictionary<string,object>;var args=(Dictionary<string,object>)body["args"];
+    if(body.Count!=2||(string)body["rpc"]!="refresh_stash"||args.Count!=1||Convert.ToInt64(args["p_post_id"])!=1793612345678901L)throw new Exception("Stash refresh must send only the selected post identity");
+    return new HttpResponseMessage(Status){Content=new StringContent(Response)};
+   }
+  }
   public static void TestCreateMarker(){
    JavaScriptSerializer serializer=new JavaScriptSerializer();Position position=new Position{X=12345.125,Y=-54321.5};
    var handler=new MarkerHandler();using(HubClient client=new HubClient(handler)){
