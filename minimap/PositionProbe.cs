@@ -168,7 +168,7 @@ namespace ScumPositionProbe {
    Func<string,Button> button=text=>old.Find(c=>c is Button&&c.Text==text) as Button;
    MinimumSize=Size.Empty;MaximumSize=Size.Empty;ClientSize=new Size(520,800);MinimumSize=MaximumSize=Size;MaximizeBox=false;AutoScroll=false;
    CompactLabel(this,"SCUM HUB",24,20,472,36).Font=new Font("Segoe UI",22,FontStyle.Bold);CompactLabel(this,"Миникарта отряда",25,60,470,24).ForeColor=Color.FromArgb(145,160,171);
-   homeTab=new RoundedButton{Text="Главная"};settingsTab=new RoundedButton{Text="Настройки"};CompactButton(homeTab);CompactButton(settingsTab);MoveTo(homeTab,this,24,100,236,38);MoveTo(settingsTab,this,260,100,236,38);
+   homeTab=new RoundedButton{Text="Главная"};settingsTab=new RoundedButton{Text="Настройки"};CompactButton(homeTab);CompactButton(settingsTab);MoveTo(homeTab,this,24,100,230,38);MoveTo(settingsTab,this,266,100,230,38);
    homePanel=new Panel();settingsPanel=new Panel();MoveTo(homePanel,this,24,150,472,576);MoveTo(settingsPanel,this,24,150,472,576);
    homeTab.Click+=delegate{SelectCompactTab(false);};settingsTab.Click+=delegate{SelectCompactTab(true);};
    loginPanel=new Panel();connectedPanel=new Panel{BackColor=Color.FromArgb(18,33,29)};MoveTo(loginPanel,homePanel,0,0,472,96);MoveTo(connectedPanel,homePanel,0,0,472,96);
@@ -198,6 +198,7 @@ namespace ScumPositionProbe {
    if(hubNick.Parent.Parent!=loginPanel||hubCode.Parent.Parent!=loginPanel||navigationGoal.Parent.Parent!=homePanel||stashRefresh.Parent!=homePanel||mapSize.Parent.Parent!=settingsPanel||autoHide.Parent!=settingsPanel)throw new Exception("Control on wrong tab");
    if(refreshMarkers.Top>=stashRefresh.Top||refreshMarkers.Top<=navigationStart.Top||stashRefresh.Top<=homePanel.Controls["quick-base"].Top)throw new Exception("Map controls and stash action order incorrect");
    foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){if(c.Left<0||c.Top<0||c.Right>panel.ClientSize.Width||c.Bottom>panel.ClientSize.Height)throw new Exception("Clipped compact control: "+c.Text);}
+   if(settingsTab.Left-homeTab.Right!=12)throw new Exception("Tab gap missing");
    if(!(toggle is RoundedButton)||toggle.Region==null||toggle.Region.IsVisible(0,0)||!toggle.Region.IsVisible(toggle.Width/2,toggle.Height/2)||!(mapSize.Parent is RoundedFieldFrame))throw new Exception("Rounded control rendering missing");
    settingsTab.PerformClick();Application.DoEvents();if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
    hub=new HubClient();UpdateConnectionLayout();homeTab.PerformClick();Application.DoEvents();if(loginPanel.Visible||!connectedPanel.Visible||hubCode.Visible||!hubState.Visible)throw new Exception("Connected login collapse incorrect");
