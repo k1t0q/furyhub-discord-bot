@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: Up/Down keyboard zoom and independent persistent player and ally arrow sizes
+# Approved release: refresh mini-map download description with setup, navigation and controls
 on:
   push:
     branches: [scum-hub-migration]
