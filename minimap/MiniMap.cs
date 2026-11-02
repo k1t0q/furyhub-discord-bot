@@ -14,6 +14,11 @@ namespace ScumPositionProbe {
   public static double NormalizeAngle(double a){return (a%360+360)%360;}
   public static double DeltaAngle(double a,double b){return (b-a+540)%360-180;}
   public static string Direction(double a){string[] names={"Север","СВ","Восток","ЮВ","Юг","ЮЗ","Запад","СЗ"};return names[(int)Math.Floor((NormalizeAngle(a)+22.5)/45)%8];}
+  public static bool MarkerInView(HubMarker marker,Position current,double viewRadius,int width,int height){
+   if(current==null||width<=0||height<=25)return false;int size=Math.Min(width,height);double span=viewRadius*200/(Left-Right);
+   double x=(marker.X-NormX(current.X))/span*size+size/2.0,y=(marker.Y-NormY(current.Y))/span*size+size/2.0;
+   return x>=0&&x<=size&&y>=0&&y<=Math.Min(size,height-25);
+  }
   public static string Sector(double x,double y){if(x<0||x>=1||y<0||y>=1)return "ВНЕ КАРТЫ";return "DCBAZ"[(int)(y*5)].ToString()+"43210"[(int)(x*5)];}
  }
  public sealed class MiniMapForm:Form {

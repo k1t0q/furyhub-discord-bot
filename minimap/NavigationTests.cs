@@ -22,6 +22,20 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   Position viewer=World(.5f,.5f);double half=500*100/(MapMath.Left-MapMath.Right);
+   HubMarker near=Goal(.501f,.5f);near.Id="near";near.Kind="base";
+   HubMarker corner=Goal((float)(.5+half*.9),(float)(.5-half*.9));corner.Id="corner";corner.Kind="other";
+   HubMarker farMarker=Goal(.7f,.7f);farMarker.Id="far";farMarker.Kind="stash";
+   HubMarker edge=Goal((float)(.5+half*1.05),.5f),footer=Goal(.5f,(float)(.5+half*.95));
+   Check(MapMath.MarkerInView(near,viewer,500,320,320)&&MapMath.MarkerInView(corner,viewer,500,320,320),"nearby section matches visible square, including corners outside circular radius");
+   Check(!MapMath.MarkerInView(edge,viewer,500,320,320)&&MapMath.MarkerInView(edge,viewer,1000,320,320),"nearby section responds to zoom");
+   Check(!MapMath.MarkerInView(footer,viewer,500,320,320)&&!MapMath.MarkerInView(near,null,500,320,320),"footer and missing position are excluded");
+   var destinations=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{farMarker,corner,near},viewer,500,320,320);
+   Check(destinations[0].Header=="НА МИНИКАРТЕ"&&destinations[1].Marker.Id=="near"&&destinations[2].Marker.Id=="corner","visible destinations lead the list sorted by distance");
+   Check(destinations.FindAll(row=>row.Marker!=null&&row.Marker.Id=="near").Count==2&&destinations.Exists(row=>row.Header=="СХРОНЫ")&&destinations.Exists(row=>row.Header=="БАЗЫ")&&destinations.Exists(row=>row.Header=="ДРУГОЕ"),"complete category lists remain available below nearby shortcuts");
+   var moved=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{farMarker,corner,near},World(.7f,.7f),500,320,320);
+   Check(moved[1].Marker.Id=="far"&&!moved.Exists(row=>row.Marker!=null&&row.Marker.Id=="near"&&row.MetresAway.HasValue),"nearby shortcuts follow current player position");
+   results.Add("PASS visible-map destination shortcuts, nearest-first order, zoom, viewport corners, footer and movement");
    RoadGraph dry=WalkingFixture(false);PointF nearby=new PointF(.4f,.4f);RoadRoute walk=dry.Find(nearby,Goal(.41f,.4f));
    Check(walk.DirectFoot&&walk.Points.Length==2&&Math.Abs(walk.Remaining-RoadGeometry.Distance(nearby,walk.Target))<.1,"nearby marker avoids the road detour");
    double walkingDistance=walk.Remaining;walk.Update(new PointF(.405f,.4f));Check(walk.Remaining<walkingDistance*.6&&RoadGeometry.Distance(walk.Projection,new PointF(.405f,.4f))<.1,"walking line and distance follow current position");
