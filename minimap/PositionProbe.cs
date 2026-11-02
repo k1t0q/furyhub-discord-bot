@@ -124,7 +124,7 @@ namespace ScumPositionProbe {
    Button logs=new Button();logs.SetBounds(380,408,190,42);logs.Text="Открыть журнал";StyleButton(logs);logs.Click+=delegate{OpenLogs();};Controls.Add(logs);
    top.SetBounds(20,466,550,25);top.Text="Поверх остальных окон";top.Checked=false;TopMost=false;top.CheckedChanged+=delegate{TopMost=top.Checked;};Controls.Add(top);
    MakeLabel("Координаты остаются на ПК. HUB подключается только для чтения меток.\r\nБуфер заменяется координатами; закрой чат и меню игры.",20,504,550,50,9,false);
-   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();
+   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();BuildArrowSizes();
    timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();layoutSave.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
   }
   void Place(Control c,int x,int y,int w,int h){c.SetBounds(x,y,w,h);c.Visible=true;}
@@ -212,6 +212,15 @@ namespace ScumPositionProbe {
    RebuildNavigationChoices();
    string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.Markers.Find(m=>m.Id==activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
    UpdateNavigationState();
+  }
+  void BuildArrowSizes(){
+   ClientSize=new Size(700,800);MinimumSize=MaximumSize=new Size(716,839);state.Top=754;
+   MakeLabel("Размер своей стрелки, %",24,680,311,22,9,false);MakeLabel("Размер стрелок союзников, %",385,680,280,22,9,false);
+   AddArrowSize(24,311,"self-arrow-size.txt",true);AddArrowSize(385,280,"ally-arrow-size.txt",false);
+  }
+  void AddArrowSize(int x,int width,string file,bool self){
+   NumericUpDown size=new NumericUpDown();size.SetBounds(x,706,width,29);size.Minimum=50;size.Maximum=200;size.Increment=10;int saved=100;try{int parsed;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor(file)),out parsed))saved=parsed;}catch{}size.Value=Math.Max(50,Math.Min(200,saved));
+   Action apply=delegate{float scale=(float)size.Value/100f;if(self)mini.SelfArrowScale=scale;else mini.AllyArrowScale=scale;mini.Invalidate();};apply();size.ValueChanged+=delegate{apply();try{File.WriteAllText(UserSettings.PathFor(file),size.Value.ToString(CultureInfo.InvariantCulture));}catch{}};Controls.Add(size);
   }
   void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
   void StartAllies(){if(live!=null)live.Dispose();AllyLive current=new AllyLive(hub);live=current;current.Sharing=sharePosition.Checked;
