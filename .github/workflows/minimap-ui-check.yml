@@ -1,0 +1,28 @@
+name: Mini-map interface checks
+# Verify rounded controls without deploying to Discord
+on:
+  push:
+    branches: [minimap-navigator-20261101]
+    paths: ['minimap/**', '.github/workflows/minimap-ui-check.yml']
+  workflow_dispatch:
+concurrency:
+  group: minimap-interface-check
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows executable
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil python3-numpy python3-scipy fonts-dejavu-core xvfb libgdiplus
+          python3 minimap/build-map.py
+          python3 minimap/build-road-graph.py
+          python3 minimap/build-windows.py
+          mono minimap/SCUM_HUB_MiniMap.exe --self-test
+          xvfb-run -a mono minimap/SCUM_HUB_MiniMap.exe --ui-test
+          cat minimap/self-test.txt
+          sha256sum minimap/SCUM_HUB_MiniMap.exe
+          node --check src/server.js
