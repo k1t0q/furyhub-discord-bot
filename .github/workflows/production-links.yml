@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: fixed twelve-hour mini-map sessions without automatic renewal
+# Approved release: ally heartbeat, silent connection recovery and server-confirmed status
 on:
   push:
     branches: [scum-hub-migration]
