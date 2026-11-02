@@ -15,31 +15,23 @@ namespace ScumPositionProbe {
  public sealed class HubExpiredException:Exception{public HubExpiredException():base("Сессия HUB истекла. Войди снова.") {}}
  public sealed class HubClient:IDisposable {
   internal CookieContainer Cookies;
-  readonly SemaphoreSlim renewalGate=new SemaphoreSlim(1,1);
+  
   internal Func<DateTime> UtcNow=()=>DateTime.UtcNow;
-  DateTime renewAt=DateTime.MaxValue,retryRenewAt=DateTime.MinValue;
+  DateTime expiresAt=DateTime.MaxValue;
   readonly HttpClient client;readonly JavaScriptSerializer json=new JavaScriptSerializer{MaxJsonLength=4194304};
   static HttpClientHandler Handler(){return new HttpClientHandler{CookieContainer=new CookieContainer(),UseCookies=true,AllowAutoRedirect=false,AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate};}
   public HubClient():this(Handler()){}
-  internal HubClient(HttpMessageHandler handler){HttpClientHandler native=handler as HttpClientHandler;if(native!=null)Cookies=native.CookieContainer;ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;client=new HttpClient(handler);client.BaseAddress=new Uri("https://scum-hub.ru/");client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Add("Origin","https://scum-hub.ru");client.DefaultRequestHeaders.Add("Accept","application/json");}
+  internal HubClient(HttpMessageHandler handler){HttpClientHandler native=handler as HttpClientHandler;if(native!=null)Cookies=native.CookieContainer;ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;client=new HttpClient(handler);client.BaseAddress=new Uri("https://scum-hub.ru/");client.Timeout=TimeSpan.FromSeconds(8);client.DefaultRequestHeaders.Add("Origin","https://scum-hub.ru");client.DefaultRequestHeaders.Add("Accept","application/json");client.DefaultRequestHeaders.Add("X-Scum-Session","fixed-12h");}
   public async Task Login(string nick,string role,string code,bool admin){
    Dictionary<string,object> body=new Dictionary<string,object>();body["code"]=code;if(!admin){body["nick"]=nick;if(!String.IsNullOrEmpty(role))body["role"]=role;}
    using(HttpResponseMessage r=await client.PostAsync(admin?"api/admin/login":"api/member/login",new StringContent(json.Serialize(body),Encoding.UTF8,"application/json"))){
     if((int)r.StatusCode==429)throw new Exception("Слишком много попыток. Подожди перед повторным входом.");
     if(!r.IsSuccessStatusCode)throw new Exception("Вход не выполнен (HTTP "+(int)r.StatusCode+"). Проверь код, роль и режим входа.");
-    renewAt=UtcNow().AddMinutes(30);retryRenewAt=DateTime.MinValue;
+    expiresAt=UtcNow().AddHours(12);
    }
   }
-  public async Task EnsureSession(CancellationToken cancel){
-   if(UtcNow()<renewAt)return;await renewalGate.WaitAsync(cancel);
-   try{if(UtcNow()<renewAt)return;if(UtcNow()<retryRenewAt)throw new Exception("Повторное продление сессии ожидает связи.");
-    retryRenewAt=UtcNow().AddSeconds(15);
-    using(HttpResponseMessage r=await client.PostAsync("api/member/refresh",new StringContent("{}",Encoding.UTF8,"application/json"),cancel)){
-     if(r.StatusCode==HttpStatusCode.Unauthorized||r.StatusCode==HttpStatusCode.Forbidden)throw new HubExpiredException();
-     if(!r.IsSuccessStatusCode)throw new Exception("Не удалось продлить сессию HUB (HTTP "+(int)r.StatusCode+").");
-     renewAt=UtcNow().AddMinutes(30);retryRenewAt=DateTime.MinValue;
-    }
-   }finally{renewalGate.Release();}
+  public Task EnsureSession(CancellationToken cancel){
+   cancel.ThrowIfCancellationRequested();if(UtcNow()>=expiresAt)throw new HubExpiredException();return Task.FromResult(0);
   }
   static string Text(Dictionary<string,object>d,string k){object v;return d.TryGetValue(k,out v)&&v!=null?Convert.ToString(v,CultureInfo.InvariantCulture):"";}
   static string LinkedKind(string id){foreach(string k in new string[]{"stash","base","other"})if(id.StartsWith(k+"-post-",StringComparison.Ordinal))return k;return "";}
@@ -168,11 +160,9 @@ namespace ScumPositionProbe {
   }
   public static void TestRenewal(){
    var handler=new RenewalHandler();using(HubClient h=new HubClient(handler)){DateTime now=new DateTime(2026,1,1,0,0,0,DateTimeKind.Utc);h.UtcNow=()=>now;h.Login("tester",null,"test-only-code",false).GetAwaiter().GetResult();
-    for(int i=0;i<16;i++){h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();if(handler.Refreshes!=i)throw new Exception("Redundant session request");now=now.AddMinutes(30);h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();if(handler.Refreshes!=i+1)throw new Exception("Session did not renew");}
-    handler.Fail=true;now=now.AddMinutes(30);try{h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();throw new Exception("Expected temporary error");}catch(HttpRequestException){}
-    int before=handler.Refreshes;try{h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();}catch{}if(handler.Refreshes!=before)throw new Exception("Renewal retry storm");
-    handler.Fail=false;now=now.AddSeconds(16);h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();
-    handler.Revoked=true;now=now.AddMinutes(30);bool rejected=false;try{h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();}catch(HubExpiredException){rejected=true;}if(!rejected)throw new Exception("Revoked session accepted");
+    for(int i=0;i<24;i++){h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();now=now.AddMinutes(30);}
+    bool expired=false;try{h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();}catch(HubExpiredException){expired=true;}
+    if(!expired||handler.Refreshes!=0)throw new Exception("Fixed twelve-hour session renewed or failed to expire");
    }
   }
   sealed class RenewalHandler:HttpMessageHandler{
