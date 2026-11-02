@@ -13,8 +13,11 @@ namespace ScumPositionProbe {
   public volatile bool Sharing=true;public volatile bool SendingAllowed;public Action<List<AllyPosition>> Updated;public Action<string> Status;
   readonly object gate=new object();string lastPacket;long revision,sentRevision;Position previousSample;double? previousHeading;
   public AllyLive(HubClient hub){this.hub=hub;this.cookies=hub.Cookies;}
+  internal Func<DateTime> UtcNow=()=>DateTime.UtcNow;
+  public static bool Visible(DateTime observed,DateTime now){return (now-observed).TotalSeconds<=7;}
+  internal long Revision{get{lock(gate)return revision;}}
   public static bool Changed(Position before,Position after,double? beforeHeading,double? afterHeading){return before==null||Math.Abs(before.X-after.X)>.5||Math.Abs(before.Y-after.Y)>.5||Math.Abs(before.Z-after.Z)>.5||beforeHeading.HasValue!=afterHeading.HasValue||(beforeHeading.HasValue&&Math.Abs(MapMath.DeltaAngle(beforeHeading.Value,afterHeading.Value))>.25);}
-  public void Observe(Position p,double north){double? heading=p.HasYaw?(double?)MapMath.NormalizeAngle(p.Yaw-north):null;lock(gate){if(!Changed(previousSample,p,previousHeading,heading))return;previousSample=p;previousHeading=heading;}double age=0;Dictionary<string,object> d=new Dictionary<string,object>();d["x"]=p.X;d["y"]=p.Y;d["z"]=p.Z;d["heading"]=p.HasYaw?(object)MapMath.NormalizeAngle(p.Yaw-north):null;d["age"]=age;lock(gate){lastPacket=new JavaScriptSerializer().Serialize(d);observed=DateTime.UtcNow;revision++;}}
+  public void Observe(Position p,double north){double? heading=p.HasYaw?(double?)MapMath.NormalizeAngle(p.Yaw-north):null;lock(gate){if(!Changed(previousSample,p,previousHeading,heading)&&(UtcNow()-observed).TotalSeconds<2)return;previousSample=p;previousHeading=heading;}double age=0;Dictionary<string,object> d=new Dictionary<string,object>();d["x"]=p.X;d["y"]=p.Y;d["z"]=p.Z;d["heading"]=p.HasYaw?(object)MapMath.NormalizeAngle(p.Yaw-north):null;d["age"]=age;lock(gate){lastPacket=new JavaScriptSerializer().Serialize(d);observed=UtcNow();revision++;}}
   DateTime observed;
   public void Start(){Task.Run((Func<Task>)Run);}
   void Report(string value){if(Status!=null)Status(value);}
