@@ -153,7 +153,7 @@ namespace ScumPositionProbe {
     case "Стоп · F9":Place(c,185,496,150,40);break;
    }}
   }
-  readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new Button(),navigationCancel=new Button();readonly Label navigationState=new Label();
+  readonly ComboBox navigationMode=new ComboBox();readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new Button(),navigationCancel=new Button();readonly Label navigationState=new Label();
   internal sealed class NavigationChoice {public HubMarker Marker;public string Header;public double? MetresAway;public override string ToString(){return Marker==null?Header:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y)+(MetresAway.HasValue?" · "+RoadGeometry.Metres(MetresAway.Value):"");}}
   bool navigationListUpdating;int lastNavigationIndex=-1;
   static int NavigationGroup(HubMarker marker){return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
@@ -182,7 +182,9 @@ namespace ScumPositionProbe {
   }
   void BuildNavigationUI(){
    ClientSize=new Size(700,720);MinimumSize=MaximumSize=new Size(716,759);state.Top=674;
-   MakeLabel("НАВИГАТОР",24,549,311,22,10,true);
+   MakeLabel("НАВИГАТОР",24,549,145,22,10,true);
+   navigationMode.SetBounds(172,546,163,25);navigationMode.DropDownStyle=ComboBoxStyle.DropDownList;navigationMode.Items.AddRange(new object[]{"На машине","Пешком"});navigationMode.SelectedIndex=0;Controls.Add(navigationMode);
+   navigationMode.SelectedIndexChanged+=async delegate{mini.Navigation.Mode=navigationMode.SelectedIndex==1?TravelMode.Foot:TravelMode.Car;string id=mini.Navigation.GoalId;HubMarker goal=mini.Markers.Find(m=>m.Id==id);if(goal!=null&&mini.Current!=null)await mini.Navigation.Plan(mini.Current,goal);};
    navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownWidth=580;navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.DrawMode=DrawMode.OwnerDrawFixed;navigationGoal.ItemHeight=23;navigationGoal.DrawItem+=DrawNavigationChoice;navigationGoal.SelectedIndexChanged+=delegate{NavigationSelectionChanged();};Controls.Add(navigationGoal);
    navigationGoal.DropDown+=delegate{RebuildNavigationChoices();BeginInvoke((Action)delegate{if(!IsDisposed&&navigationGoal.DroppedDown)Native.SendMessage(navigationGoal.Handle,0x015c,IntPtr.Zero,IntPtr.Zero);});};
    mini.ZoomChanged+=delegate{if(!navigationGoal.DroppedDown)RebuildNavigationChoices();};
