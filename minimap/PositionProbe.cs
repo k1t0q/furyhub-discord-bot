@@ -157,7 +157,7 @@ namespace ScumPositionProbe {
     case "Стоп · F9":Place(c,185,496,150,40);break;
    }}
   }
-  readonly ComboBox navigationMode=new ComboBox();readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new Button(),navigationCancel=new Button();readonly Label navigationState=new Label();
+  readonly ComboBox navigationMode=new ComboBox();readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new Button(),navigationCancel=new Button(),stashRefresh=new Button();bool refreshingStash;readonly Label navigationState=new Label();
   internal sealed class NavigationChoice {public HubMarker Marker;public string Header;public double? MetresAway;public override string ToString(){return Marker==null?Header:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y)+(MetresAway.HasValue?" · "+RoadGeometry.Metres(MetresAway.Value):"");}}
   bool navigationListUpdating;int lastNavigationIndex=-1;
   static int NavigationGroup(HubMarker marker){return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
@@ -197,10 +197,18 @@ namespace ScumPositionProbe {
    navigationState.SetBounds(385,617,280,50);navigationState.Font=new Font("Segoe UI",9);Controls.Add(navigationState);
    navigationStart.Click+=async delegate{NavigationChoice choice=navigationGoal.SelectedItem as NavigationChoice;if(choice==null||choice.Marker==null)return;if(mini.Current==null){navigationState.Text="Сначала включи отслеживание и получи позицию в игре.";return;}await mini.Navigation.Plan(mini.Current,choice.Marker);mini.Navigation.Update(mini.Current);};
    navigationCancel.Click+=delegate{mini.Navigation.Cancel("Маршрут отменён.");};
+   stashRefresh.Text="Обновить схрон · 14 дней";stashRefresh.SetBounds(385,658,280,30);StyleButton(stashRefresh);Controls.Add(stashRefresh);stashRefresh.Click+=async delegate{await RefreshSelectedStash();};
    mini.Navigation.Changed+=delegate{if(!IsDisposed){UpdateNavigationState();mini.Invalidate();}};
    UpdateNavigationState();
   }
-  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;}
+  async System.Threading.Tasks.Task RefreshSelectedStash(){
+   NavigationChoice choice=navigationGoal.SelectedItem as NavigationChoice;if(refreshingStash||hub==null||choice==null||!HubClient.CanRefreshStash(choice.Marker))return;
+   HubMarker marker=choice.Marker;HubClient current=hub;int generation=hubGeneration;refreshingStash=true;stashRefresh.Text="Обновляю…";UpdateNavigationState();
+   try{await current.RefreshStash(marker);if(IsDisposed||hub!=current||generation!=hubGeneration)return;await RefreshHub();if(!IsDisposed)state.Text="Схрон «"+marker.Name+"» обновлён на 14 дней.";}
+   catch(Exception ex){if(!IsDisposed&&hub==current&&generation==hubGeneration)state.Text=ex.Message;}
+   finally{refreshingStash=false;if(!IsDisposed){stashRefresh.Text="Обновить схрон · 14 дней";UpdateNavigationState();}}
+  }
+  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash&&selected!=null&&HubClient.CanRefreshStash(selected.Marker);}
   void RebuildNavigationChoices(){
    NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
    navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
@@ -215,10 +223,10 @@ namespace ScumPositionProbe {
   }
   bool creatingMarker;
   void BuildQuickMarkers(){
-   ClientSize=new Size(700,880);MinimumSize=MaximumSize=new Size(716,919);state.Top=834;
-   MakeLabel("ДОБАВИТЬ В ТЕКУЩЕЙ ПОЗИЦИИ",24,752,650,22,9,true);
+   ClientSize=new Size(700,900);MinimumSize=MaximumSize=new Size(716,939);state.Top=854;
+   MakeLabel("ДОБАВИТЬ В ТЕКУЩЕЙ ПОЗИЦИИ",24,772,650,22,9,true);
    string[] captions={"Схрон","Машина","Вражеская база","Метка"},categories={"stash","car","base","other"};
-   for(int i=0;i<4;i++){string category=categories[i],caption=captions[i];Button add=new Button();add.Text=caption;add.SetBounds(24+i*164,780,149,34);StyleButton(add);Controls.Add(add);add.Click+=async delegate{await AddQuickMarker(category,caption);};}
+   for(int i=0;i<4;i++){string category=categories[i],caption=captions[i];Button add=new Button();add.Text=caption;add.SetBounds(24+i*164,800,149,34);StyleButton(add);Controls.Add(add);add.Click+=async delegate{await AddQuickMarker(category,caption);};}
   }
   async System.Threading.Tasks.Task AddQuickMarker(string category,string caption){
    if(creatingMarker)return;if(hub==null){state.Text="Сначала подключись к HUB.";return;}
@@ -241,11 +249,11 @@ namespace ScumPositionProbe {
   }
   void BuildArrowSizes(){
    ClientSize=new Size(700,800);MinimumSize=MaximumSize=new Size(716,839);state.Top=754;
-   MakeLabel("Размер своей стрелки, %",24,680,311,22,9,false);MakeLabel("Размер стрелок союзников, %",385,680,280,22,9,false);
+   MakeLabel("Размер своей стрелки, %",24,700,311,22,9,false);MakeLabel("Размер стрелок союзников, %",385,700,280,22,9,false);
    AddArrowSize(24,311,"self-arrow-size.txt",true);AddArrowSize(385,280,"ally-arrow-size.txt",false);
   }
   void AddArrowSize(int x,int width,string file,bool self){
-   NumericUpDown size=new NumericUpDown();size.SetBounds(x,706,width,29);size.Minimum=50;size.Maximum=200;size.Increment=10;int saved=100;try{int parsed;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor(file)),out parsed))saved=parsed;}catch{}size.Value=Math.Max(50,Math.Min(200,saved));
+   NumericUpDown size=new NumericUpDown();size.SetBounds(x,726,width,29);size.Minimum=50;size.Maximum=200;size.Increment=10;int saved=100;try{int parsed;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor(file)),out parsed))saved=parsed;}catch{}size.Value=Math.Max(50,Math.Min(200,saved));
    Action apply=delegate{float scale=(float)size.Value/100f;if(self)mini.SelfArrowScale=scale;else mini.AllyArrowScale=scale;mini.Invalidate();};apply();size.ValueChanged+=delegate{apply();try{File.WriteAllText(UserSettings.PathFor(file),size.Value.ToString(CultureInfo.InvariantCulture));}catch{}};Controls.Add(size);
   }
   void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
@@ -356,6 +364,7 @@ namespace ScumPositionProbe {
    Require(MapMath.DeltaAngle(350,10)==20&&MapMath.DeltaAngle(10,350)==-20,"Heading wraps");lines.Add("PASS map bounds, sectors and short rotation interpolation");
    HubSnapshot snapshot=HubClient.Parse("{\"member\":{\"nick\":\"tester\"},\"posts\":[],\"markers\":[{\"id\":1,\"x\":0.2,\"y\":0.3,\"name\":\"Base\",\"type\":\"base\"},{\"x\":999,\"y\":0.1}]}");Require(snapshot.Markers.Count==1&&snapshot.Markers[0].Name=="Base","HUB snapshot parser");lines.Add("PASS HUB marker validation");
    MarkerMergeTests.Run();lines.Add("PASS HUB linked markers, orphan filtering, post coordinates, titles and deletion");
+   HubClient.TestRefreshStash();lines.Add("PASS selected stash refresh, invalid marker rejection, large post IDs, session expiry and server errors");
    HubClient.TestCreateMarker();lines.Add("PASS four marker types, coordinate round-trip, invalid input, access revocation and no write retries");
    HubClient.TestProtocol();lines.Add("PASS read-only HUB requests, marker additions/deletions and session expiry");
    Require(MapMath.Direction(0)=="Север"&&MapMath.Direction(30)=="СВ"&&MapMath.Direction(180)=="Юг"&&MapMath.Direction(225)=="ЮЗ"&&MapMath.Direction(359)=="Север","Compass directions");lines.Add("PASS compass labels and wraparound");
