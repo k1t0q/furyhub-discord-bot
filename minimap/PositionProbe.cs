@@ -61,7 +61,7 @@ namespace ScumPositionProbe {
    MakeLabel("Ник",20,593,130,20,9,false);MakeLabel("Роль",170,593,130,20,9,false);MakeLabel("Код входа",325,593,240,20,9,false);
    hubNick.SetBounds(20,615,135,27);hubNick.Text="k1t0";Controls.Add(hubNick);
    hubRole.SetBounds(170,615,140,27);hubRole.DropDownStyle=ComboBoxStyle.DropDownList;hubRole.Items.AddRange(new object[]{"Rifler","Sniper","Bomber","Locker","Builder","Helper"});hubRole.SelectedIndex=0;Controls.Add(hubRole);
-   hubCode.SetBounds(325,615,245,27);hubCode.UseSystemPasswordChar=true;Controls.Add(hubCode);
+   hubCode.SetBounds(325,615,245,27);hubCode.UseSystemPasswordChar=false;Controls.Add(hubCode);
    adminLogin.SetBounds(20,649,550,24);adminLogin.Text="Личный вход администратора (код тот же, что на сайте)";adminLogin.Checked=true;Controls.Add(adminLogin);
    hubLogin.SetBounds(20,682,170,34);hubLogin.Text="Подключить HUB";StyleButton(hubLogin);hubLogin.Click+=async delegate{await LoginHub();};Controls.Add(hubLogin);
    Button logout=new Button();logout.SetBounds(200,682,110,34);logout.Text="Отключить";StyleButton(logout);logout.Click+=delegate{DisconnectHub();};Controls.Add(logout);
@@ -135,7 +135,7 @@ namespace ScumPositionProbe {
    
    Place(refreshMarkers,24,269,311,30);
    Place(hubLogin,24,308,192,36);
-   Place(hubState,24,355,311,43);hubState.Font=new Font("Segoe UI",9);hubState.Text="Введи код своего аккаунта HUB.";
+   Place(hubState,24,355,311,32);hubState.Font=new Font("Segoe UI",9);hubState.Text="Введи код своего аккаунта HUB.";
    MakeLabel("ОТСЛЕЖИВАНИЕ",24,416,320,24,10,true);
    Place(mode,24,451,311,29);
    Place(toggle,24,496,150,40);Place(state,24,548,650,38);state.Font=new Font("Segoe UI",9);
@@ -216,7 +216,7 @@ namespace ScumPositionProbe {
   void BuildAutoHide(){autoHide.SetBounds(385,511,290,27);autoHide.Text="Скрывать карту при курсоре";autoHide.Font=new Font("Segoe UI",9);autoHide.Checked=true;try{autoHide.Checked=File.ReadAllText(UserSettings.PathFor("auto-hide.txt")).Trim()!="0";}catch{}autoHide.CheckedChanged+=delegate{try{File.WriteAllText(UserSettings.PathFor("auto-hide.txt"),autoHide.Checked?"1":"0");}catch{}if(!autoHide.Checked){menuCursor=autoHidden=lastCursor=false;ApplyVisibility();}};Controls.Add(autoHide);}
   void BuildKeyPicker(){
    try{int key;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor("copy-key.txt")),out key)&&KeyCapture.Allowed((Keys)key))copyKey=(ushort)key;}catch{}
-   mode.Items[0]="Вручную";mode.Items[1]="Автоматически";mode.Width=155;
+   mode.Items[0]="Вручную";mode.Items[1]="Автоматически";mode.SelectedIndex=1;mode.Width=155;
    keyPicker.SetBounds(190,451,145,29);keyPicker.Text="Клавиша: "+((Keys)copyKey).ToString();StyleButton(keyPicker);
    keyPicker.Click+=delegate{using(KeyCapture dialog=new KeyCapture()){if(dialog.ShowDialog(this)!=DialogResult.OK)return;copyKey=(ushort)dialog.Selected;keyPicker.Text="Клавиша: "+dialog.Selected;try{File.WriteAllText(UserSettings.PathFor("copy-key.txt"),copyKey.ToString());}catch{}}};Controls.Add(keyPicker);
   }

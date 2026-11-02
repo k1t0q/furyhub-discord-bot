@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: grouped navigator destinations - stashes, bases and other
+# Approved release: visible HUB code, standard unclipped checkbox and automatic tracking default
 on:
   push:
     branches: [scum-hub-migration]
