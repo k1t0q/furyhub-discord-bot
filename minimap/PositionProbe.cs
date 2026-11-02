@@ -169,7 +169,7 @@ namespace ScumPositionProbe {
  }
  public sealed class ProbeForm:Form {
   internal static bool UiTest;
-  AllyLive live;readonly CheckBox sharePosition=new CheckBox();
+  readonly AllyInbox allyInbox=new AllyInbox();AllyLive live;readonly CheckBox sharePosition=new CheckBox();
   readonly MiniMapForm mini=new MiniMapForm();HubClient hub;int hubGeneration;bool syncing;readonly Button refreshMarkers=new RoundedButton();
   readonly TextBox hubNick=new TextBox(),hubCode=new TextBox();readonly DarkComboBox hubRole=new DarkComboBox();readonly CheckBox adminLogin=new CheckBox();readonly Label hubState=new Label();readonly Button hubLogin=new RoundedButton();
   void BuildHubUI(){
@@ -452,7 +452,7 @@ namespace ScumPositionProbe {
   }
   void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
   void StartAllies(){if(live!=null)live.Dispose();AllyLive current=new AllyLive(hub);live=current;current.Sharing=sharePosition.Checked;
-   current.Updated=delegate(List<AllyPosition> peers){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current&&!mini.IsDisposed){mini.Allies=peers;mini.Invalidate();}});}catch{}};
+   current.Updated=delegate(List<AllyPosition> peers){allyInbox.Publish(current,peers);};
    current.Status=delegate(string status){try{if(!IsDisposed&&IsHandleCreated)BeginInvoke((Action)delegate{if(live==current)hubState.Text=status;});}catch{}};current.Start();
   }
   void BuildZoomUI(){
@@ -490,6 +490,7 @@ namespace ScumPositionProbe {
   readonly ZoomKeys zoomKeys=new ZoomKeys();
   void UpdateZoomKeys(long now){uint pid;IntPtr window;bool allowed=!movingWindow&&mapWanted&&mini.Visible&&IsGame(out pid,out window)&&!Native.CursorVisible()&&!Native.Down(0x10)&&!Native.Down(0x11)&&!Native.Down(0x12);int direction=zoomKeys.Update(allowed,Native.Down(0x26),Native.Down(0x28),now);if(direction!=0)mini.ChangeZoom(direction>0);}
   void Tick(){
+   var newestAllies=allyInbox.Take(live);if(newestAllies!=null&&!mini.IsDisposed){mini.Allies=newestAllies;mini.Invalidate();}
    long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(!movingWindow&&now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
    metrics.Text="Попытки: "+attempts+"   Получено: "+successes+"   Изменений: "+changes+"   Нет ответа: "+timeouts+"\r\nПоследние координаты: "+(lastSuccess<0?"ещё не получены":((now-lastSuccess)/1000.0).ToString("0.0")+" с назад")+"   Пропуски ввода: "+blocked;
    }
@@ -537,7 +538,7 @@ namespace ScumPositionProbe {
   void SyncMapSettings(){layoutBusy=true;mapX.Value=Math.Max(mapX.Minimum,Math.Min(mapX.Maximum,mini.Left));mapY.Value=Math.Max(mapY.Minimum,Math.Min(mapY.Maximum,mini.Top));mapSize.Value=Math.Max(mapSize.Minimum,Math.Min(mapSize.Maximum,mini.Width));layoutBusy=false;}
   void LoadMapSettings(){try{string[] v=File.ReadAllText(UserSettings.PathFor("layout.txt")).Split(new char[]{','},StringSplitOptions.None);int x,y,size;if(v.Length==3&&Int32.TryParse(v[0],out x)&&Int32.TryParse(v[1],out y)&&Int32.TryParse(v[2],out size)){size=Math.Max(160,Math.Min(1000,size));Rectangle bounds=new Rectangle(x,y,size,size);bool visible=false;foreach(Screen screen in Screen.AllScreens)if(screen.WorkingArea.IntersectsWith(bounds))visible=true;if(visible)mini.SetBounds(x,y,size,size);}}catch{}}
   void SaveMapSettings(){try{File.WriteAllText(UserSettings.PathFor("layout.txt"),mini.Left+","+mini.Top+","+mini.Width);}catch{}}
-  void Record(Position pos){bool changed=previous!=null&&(Math.Abs(pos.X-previous.X)>.01||Math.Abs(pos.Y-previous.Y)>.01||Math.Abs(pos.Z-previous.Z)>.01);successes++;if(changed)changes++;lastSuccess=clock.ElapsedMilliseconds;previous=pos;mini.SetPosition(pos);if(live!=null)live.Observe(pos,mini.NorthYaw);positionLabel.Text=pos.Display()+"   "+MapMath.Sector(MapMath.NormX(pos.X),MapMath.NormY(pos.Y));state.Text=changed?"Координаты обновились во время движения.":"Координаты получены. Пробеги несколько метров.";
+  void Record(Position pos){bool changed=previous!=null&&(Math.Abs(pos.X-previous.X)>.01||Math.Abs(pos.Y-previous.Y)>.01||Math.Abs(pos.Z-previous.Z)>.01);successes++;if(changed)changes++;lastSuccess=clock.ElapsedMilliseconds;previous=pos;if(live!=null)live.Observe(pos,mini.NorthYaw);mini.SetPosition(pos);positionLabel.Text=pos.Display()+"   "+MapMath.Sector(MapMath.NormX(pos.X),MapMath.NormY(pos.Y));state.Text=changed?"Координаты обновились во время движения.":"Координаты получены. Пробеги несколько метров.";
    try{if(log!=null){log.WriteLine(DateTime.UtcNow.ToString("o")+","+pos.Number(pos.X)+","+pos.Number(pos.Y)+","+pos.Number(pos.Z)+","+(pos.HasYaw?pos.Number(pos.Yaw):"")+","+(changed?"1":"0"));log.Flush();}}catch(Exception){Stop("Ошибка записи журнала. Считывание остановлено.");}
   }
   public void Abort(string reason){Stop(reason);}

@@ -53,7 +53,7 @@ namespace ScumPositionProbe {
   public void ChangeZoom(bool closer){SetZoomRadius(radius*(closer?.8:1.25));}
   public void PausePainting(bool pause){if(pause)animation.Stop();else if(Visible)animation.Start();}
   public void ToggleLock(){Locked=!Locked;if(IsHandleCreated){int ex=GetWindowLong(Handle,-20);SetWindowLong(Handle,-20,Locked?ex|0x20|0x08000000:(ex&~0x20)|0x08000000);}Invalidate();}
-  public void SetPosition(Position p){Navigation.Update(p);Current=p;LastPosition=DateTime.UtcNow;{renderedX=MapMath.NormX(p.X);renderedY=MapMath.NormY(p.Y);renderedHeading=p.HasYaw?MapMath.NormalizeAngle(p.Yaw-NorthYaw):0;}Invalidate();if(Visible)Update();}
+  public void SetPosition(Position p){Navigation.Update(p);Current=p;LastPosition=DateTime.UtcNow;{renderedX=MapMath.NormX(p.X);renderedY=MapMath.NormY(p.Y);renderedHeading=p.HasYaw?MapMath.NormalizeAngle(p.Yaw-NorthYaw):0;}Invalidate();}
   protected override void OnPaint(PaintEventArgs e){base.OnPaint(e);Graphics g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;g.InterpolationMode=InterpolationMode.HighQualityBilinear;
    using(SolidBrush bg=new SolidBrush(Color.FromArgb(14,22,27)))g.FillRectangle(bg,0,0,Width,Height);
    int size=Math.Min(Width,Height);Rectangle field=new Rectangle(0,0,size,size);float midX=field.Left+size/2f,midY=field.Top+size/2f;

@@ -22,6 +22,10 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   var inbox=new AllyInbox();object owner=new object();for(int i=0;i<10000;i++)inbox.Publish(owner,new List<AllyPosition>{new AllyPosition{Nick=i.ToString()}});
+   Check(inbox.Take(owner)[0].Nick=="9999"&&inbox.Take(owner)==null,"ally frame backlog is replaced by latest");
+   inbox.Publish(new object(),new List<AllyPosition>());Check(inbox.Take(owner)==null,"old connection frame discarded");results.Add("PASS latest-only ally frame coalescing under ten thousand updates");
+
    DateTime presenceNow=new DateTime(2026,11,2,0,0,0,DateTimeKind.Utc);
    Check(AllyLive.Visible(presenceNow,presenceNow.AddSeconds(30))&&!AllyLive.Visible(presenceNow,presenceNow.AddMilliseconds(30001)),"ally hides after thirty seconds");
    using(HubClient presenceHub=new HubClient())using(AllyLive presence=new AllyLive(presenceHub)){
