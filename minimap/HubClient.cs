@@ -81,11 +81,54 @@ namespace ScumPositionProbe {
     if(name.Length>80)name=name.Substring(0,80);result.Markers.Add(new HubMarker{Id=id,Name=name,Kind=kind,X=x,Y=y,Color=MarkerColor(d,kind,post)});
    }return result;
   }
+  internal static Dictionary<string,object> MarkerPost(string category,string name,Position position){
+   if(category!="stash"&&category!="car"&&category!="base"&&category!="other")throw new ArgumentException("Неизвестный тип метки.");
+   name=(name??"").Trim();if(name.Length==0||name.Length>70||name.IndexOfAny(new char[]{'\r','\n'})>=0)throw new ArgumentException("Введи название от 1 до 70 символов в одну строку.");
+   if(position==null)throw new ArgumentException("Нет позиции игрока.");double x=MapMath.NormX(position.X),y=MapMath.NormY(position.Y);
+   if(Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1)throw new ArgumentException("Координаты за пределами карты.");
+   string title=category=="car"?"🚗 "+name:name;
+   return new Dictionary<string,object>{{"table","squad_place_posts"},{"action","insert"},{"values",new Dictionary<string,object>{{"kind",category=="car"?"other":category},{"images",new object[0]},{"map_marker_name",title},{"comment",title+"\nКоординаты: X="+position.X.ToString("R",CultureInfo.InvariantCulture)+" Y="+position.Y.ToString("R",CultureInfo.InvariantCulture)+"\nИсточник: Миникарта SCUM HUB"}}}};
+  }
+  public async Task CreateMarker(string category,string name,Position position){
+   Dictionary<string,object> body=MarkerPost(category,name,position);await EnsureSession(CancellationToken.None);
+   using(HttpResponseMessage response=await client.PostAsync("api/legacy",new StringContent(json.Serialize(body),Encoding.UTF8,"application/json"))){
+    if(response.StatusCode==HttpStatusCode.Unauthorized||response.StatusCode==HttpStatusCode.Forbidden)throw new HubExpiredException();
+    if(!response.IsSuccessStatusCode)throw new Exception("Не удалось сохранить точку (HTTP "+(int)response.StatusCode+"). Проверь метки HUB перед повтором.");
+    Dictionary<string,object> result=json.DeserializeObject(await response.Content.ReadAsStringAsync()) as Dictionary<string,object>;object error,data;
+    if(result==null||(result.TryGetValue("error",out error)&&error!=null)||!result.TryGetValue("data",out data)||!(data is object[])||((object[])data).Length!=1)throw new Exception("HUB не подтвердил сохранение. Обнови метки перед повтором.");
+   }
+  }
   public async Task<HubSnapshot> Snapshot(){await EnsureSession(CancellationToken.None);using(HttpResponseMessage r=await client.GetAsync("api/member/snapshot")){
    if(r.StatusCode==HttpStatusCode.Unauthorized||r.StatusCode==HttpStatusCode.Forbidden)throw new HubExpiredException();
    if(!r.IsSuccessStatusCode)throw new Exception("HUB временно недоступен (HTTP "+(int)r.StatusCode+").");
    string text=await r.Content.ReadAsStringAsync();return Parse(text);
   }}
+  public static void TestCreateMarker(){
+   JavaScriptSerializer serializer=new JavaScriptSerializer();Position position=new Position{X=12345.125,Y=-54321.5};
+   var handler=new MarkerHandler();using(HubClient client=new HubClient(handler)){
+    foreach(string category in new string[]{"stash","car","base","other"}){
+     client.CreateMarker(category,"Проверка",position).GetAwaiter().GetResult();var values=(Dictionary<string,object>)handler.Last["values"];
+     if((string)values["kind"]!=(category=="car"?"other":category)||values.ContainsKey("squad_id")||values.ContainsKey("created_by"))throw new Exception("Marker kind or identity error");
+     string title=(string)values["map_marker_name"],comment=(string)values["comment"];
+     if((category=="car")!=title.StartsWith("🚗 "))throw new Exception("Vehicle label missing");
+     var post=new Dictionary<string,object>(values);post["id"]=17;post["created_at"]="2026-11-02T00:00:00Z";
+     HubSnapshot snapshot=Parse(serializer.Serialize(new {posts=new object[]{post},markers=new object[0]}));
+     if(snapshot.Markers.Count!=1||snapshot.Markers[0].Name!=title||snapshot.Markers[0].Kind!=(string)values["kind"]||Math.Abs(snapshot.Markers[0].X-MapMath.NormX(position.X))>1e-9||Math.Abs(snapshot.Markers[0].Y-MapMath.NormY(position.Y))>1e-9)throw new Exception("Created publication does not round-trip to map");
+     if(!comment.Contains("X=12345.125 Y=-54321.5"))throw new Exception("Coordinates changed with culture");
+    }
+    int count=handler.Writes;foreach(Position invalid in new Position[]{null,new Position{X=Double.NaN},new Position{X=2000000}}){bool failed=false;try{client.CreateMarker("stash","test",invalid).GetAwaiter().GetResult();}catch(ArgumentException){failed=true;}if(!failed)throw new Exception("Invalid marker coordinates accepted");}
+    foreach(string name in new string[]{"",new string('x',71),"one\ntwo"}){bool failed=false;try{client.CreateMarker("stash",name,position).GetAwaiter().GetResult();}catch(ArgumentException){failed=true;}if(!failed)throw new Exception("Invalid marker name accepted");}if(handler.Writes!=count)throw new Exception("Invalid input reached network");
+    handler.Status=HttpStatusCode.Unauthorized;bool expired=false;try{client.CreateMarker("base","test",position).GetAwaiter().GetResult();}catch(HubExpiredException){expired=true;}if(!expired)throw new Exception("Marker access revocation ignored");
+    handler.Status=HttpStatusCode.OK;handler.Response="{\"data\":null,\"error\":\"database_unavailable\"}";bool rejected=false;count=handler.Writes;try{client.CreateMarker("other","test",position).GetAwaiter().GetResult();}catch(Exception){rejected=true;}if(!rejected||handler.Writes!=count+1)throw new Exception("Marker error was retried or treated as success");
+   }
+  }
+  sealed class MarkerHandler:HttpMessageHandler{
+   public int Writes;public Dictionary<string,object> Last;public HttpStatusCode Status=HttpStatusCode.OK;public string Response="{\"data\":[{\"id\":17}],\"error\":null}";
+   protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancel){
+    if(request.Method!=HttpMethod.Post||request.RequestUri.AbsolutePath!="/api/legacy"||!request.Headers.Contains("Origin"))throw new Exception("Wrong marker API");Writes++;Last=new JavaScriptSerializer().DeserializeObject(await request.Content.ReadAsStringAsync()) as Dictionary<string,object>;
+    if((string)Last["table"]!="squad_place_posts"||(string)Last["action"]!="insert")throw new Exception("Wrong marker write");return new HttpResponseMessage(Status){Content=new StringContent(Response)};
+   }
+  }
   public static void TestRenewal(){
    var handler=new RenewalHandler();using(HubClient h=new HubClient(handler)){DateTime now=new DateTime(2026,1,1,0,0,0,DateTimeKind.Utc);h.UtcNow=()=>now;h.Login("tester",null,"test-only-code",false).GetAwaiter().GetResult();
     for(int i=0;i<16;i++){h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();if(handler.Refreshes!=i)throw new Exception("Redundant session request");now=now.AddMinutes(30);h.EnsureSession(CancellationToken.None).GetAwaiter().GetResult();if(handler.Refreshes!=i+1)throw new Exception("Session did not renew");}
