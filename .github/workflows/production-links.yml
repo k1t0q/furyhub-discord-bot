@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: keep last ally position visible for thirty seconds
+# Approved release: allow all quick markers from last known position while game is unfocused
 on:
   push:
     branches: [scum-hub-migration]
