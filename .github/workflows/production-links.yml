@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: fully rounded selectors, full-width marker list, dark numeric arrows and neutral connection background
+# Approved release: restore visible HUB login, fix repeated-click dropdown dismissal and cache smooth scrolling rows
 on:
   push:
     branches: [scum-hub-migration]
