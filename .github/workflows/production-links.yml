@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: restore visible HUB login, fix repeated-click dropdown dismissal and cache smooth scrolling rows
+# Approved release: immediate dropdown wheel input without animation timers or synchronous repaint stalls; burst-tested on Windows
 on:
   push:
     branches: [scum-hub-migration]
