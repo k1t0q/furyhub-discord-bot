@@ -58,6 +58,7 @@ namespace ScumPositionProbe {
   public static bool Send(INPUT[] keys){return SendInput((uint)keys.Length,keys,Marshal.SizeOf(typeof(INPUT)))==(uint)keys.Length;}
  }
  public sealed class ProbeForm:Form {
+  internal static bool UiTest;
   AllyLive live;readonly CheckBox sharePosition=new CheckBox();
   readonly MiniMapForm mini=new MiniMapForm();HubClient hub;int hubGeneration;bool syncing;readonly Button refreshMarkers=new Button();
   readonly TextBox hubNick=new TextBox(),hubCode=new TextBox();readonly ComboBox hubRole=new ComboBox();readonly CheckBox adminLogin=new CheckBox();readonly Label hubState=new Label();readonly Button hubLogin=new Button();
@@ -75,7 +76,7 @@ namespace ScumPositionProbe {
    Button locked=new Button();locked.SetBounds(200,770,170,34);locked.Text="Сквозь клики · F7";StyleButton(locked);locked.Click+=delegate{mini.ToggleLock();};Controls.Add(locked);
    Button north=new Button();north.SetBounds(380,770,190,34);north.Text="Смотрю на север · F11";StyleButton(north);north.Click+=delegate{CalibrateNorth();};Controls.Add(north);
    refreshMarkers.Text="Обновить метки";StyleButton(refreshMarkers);refreshMarkers.Enabled=false;refreshMarkers.Click+=async delegate{await RefreshHub();};Controls.Add(refreshMarkers);
-   LoadCalibration();Shown+=delegate{uint pid;IntPtr win;bool game=IsGame(out pid,out win);focusAllowed=game||pid==appPid;ApplyVisibility();};
+   LoadCalibration();Shown+=delegate{if(UiTest)return;uint pid;IntPtr win;bool game=IsGame(out pid,out win);focusAllowed=game||pid==appPid;ApplyVisibility();};
   }
   void LoadCalibration(){try{string f=UserSettings.PathFor("north.txt");double v;if(File.Exists(f)&&Double.TryParse(File.ReadAllText(f),NumberStyles.Float,CultureInfo.InvariantCulture,out v)&&!Double.IsInfinity(v)&&!Double.IsNaN(v)){mini.NorthYaw=MapMath.NormalizeAngle(v);mini.NorthCalibrated=true;}}catch{}}
   void CalibrateNorth(){if(previous==null||!previous.HasYaw||lastSuccess<0||clock.ElapsedMilliseconds-lastSuccess>4000){state.Text="Для калибровки нужны свежие координаты с углом Yaw. Смотри на север и нажми F11 в игре.";return;}mini.NorthYaw=previous.Yaw;mini.NorthCalibrated=true;try{File.WriteAllText(UserSettings.PathFor("north.txt"),previous.Yaw.ToString(CultureInfo.InvariantCulture));}catch{}state.Text="Север откалиброван по текущему направлению.";}
@@ -88,7 +89,7 @@ namespace ScumPositionProbe {
    int version=++hubGeneration;HubClient attempt=new HubClient();hubLogin.Enabled=false;hubState.Text="Подключаюсь к scum-hub.ru…";
    try{await attempt.Login(hubNick.Text.Trim(),null,hubCode.Text,String.Equals(hubNick.Text.Trim(),"k1t0",StringComparison.OrdinalIgnoreCase));HubSnapshot snapshot=await attempt.Snapshot();
     if(IsDisposed||version!=hubGeneration){attempt.Dispose();return;}if(hub!=null)hub.Dispose();hub=attempt;refreshMarkers.Enabled=true;StartAllies();mini.Markers=snapshot.Markers;UpdateNavigationMarkers();mini.LastMarkers=DateTime.UtcNow;mini.SyncEnabled=true;mini.SyncStatus="HUB · "+snapshot.Markers.Count+" меток";hubState.Text="Подключён: "+snapshot.Nick+" · "+snapshot.Markers.Count+" меток";
-   }catch(Exception ex){attempt.Dispose();if(!IsDisposed&&version==hubGeneration)hubState.Text=ex.Message;}finally{if(!IsDisposed){hubCode.Clear();hubLogin.Enabled=true;}}
+   }catch(Exception ex){attempt.Dispose();if(!IsDisposed&&version==hubGeneration)hubState.Text=ex.Message;}finally{if(!IsDisposed){hubCode.Clear();hubLogin.Enabled=true;UpdateConnectionLayout();}}
   }
   async System.Threading.Tasks.Task RefreshHub(){if(hub==null||syncing)return;syncing=true;refreshMarkers.Enabled=false;refreshMarkers.Text="Обновляю…";HubClient current=hub;int version=hubGeneration;
    try{HubSnapshot snapshot=await current.Snapshot();if(IsDisposed||version!=hubGeneration||current!=hub)return;mini.Markers=snapshot.Markers;UpdateNavigationMarkers();mini.LastMarkers=DateTime.UtcNow;mini.SyncEnabled=true;mini.SyncStatus="HUB · "+snapshot.Markers.Count+" меток";hubState.Text="HUB: "+snapshot.Nick+" · обновлено "+DateTime.Now.ToString("HH:mm:ss");}
@@ -96,7 +97,7 @@ namespace ScumPositionProbe {
    catch(Exception){if(!IsDisposed&&version==hubGeneration){mini.SyncStatus="HUB: нет связи · метки устарели";hubState.Text="Нет связи с HUB. Нажми «Обновить метки», чтобы повторить.";}}
    finally{syncing=false;if(!IsDisposed){refreshMarkers.Enabled=hub!=null;refreshMarkers.Text="Обновить метки";}}
   }
-  void DisconnectHub(){mini.Navigation.Cancel("Маршрут отменён: HUB отключён.");refreshMarkers.Enabled=false;if(live!=null){live.Dispose();live=null;}mini.Allies=new List<AllyPosition>();hubGeneration++;if(hub!=null){hub.Dispose();hub=null;}mini.Markers=new List<HubMarker>();UpdateNavigationMarkers();mini.SyncEnabled=false;mini.SyncStatus="HUB не подключён";hubCode.Clear();hubState.Text="Отключено. Метки удалены из миникарты.";}
+  void DisconnectHub(){mini.Navigation.Cancel("Маршрут отменён: HUB отключён.");refreshMarkers.Enabled=false;if(live!=null){live.Dispose();live=null;}mini.Allies=new List<AllyPosition>();hubGeneration++;if(hub!=null){hub.Dispose();hub=null;}mini.Markers=new List<HubMarker>();UpdateNavigationMarkers();mini.SyncEnabled=false;mini.SyncStatus="HUB не подключён";hubCode.Clear();hubState.Text="Отключено. Метки удалены из миникарты.";UpdateConnectionLayout();}
 
   readonly Timer timer=new Timer();readonly Stopwatch clock=Stopwatch.StartNew();
   readonly Label state=new Label(),positionLabel=new Label(),metrics=new Label(),foregroundLabel=new Label();
@@ -124,8 +125,52 @@ namespace ScumPositionProbe {
    Button logs=new Button();logs.SetBounds(380,408,190,42);logs.Text="Открыть журнал";StyleButton(logs);logs.Click+=delegate{OpenLogs();};Controls.Add(logs);
    top.SetBounds(20,466,550,25);top.Text="Поверх остальных окон";top.Checked=false;TopMost=false;top.CheckedChanged+=delegate{TopMost=top.Checked;};Controls.Add(top);
    MakeLabel("Координаты остаются на ПК. HUB подключается только для чтения меток.\r\nБуфер заменяется координатами; закрой чат и меню игры.",20,504,550,50,9,false);
-   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();BuildArrowSizes();BuildQuickMarkers();
-   timer.Interval=25;timer.Tick+=delegate{Tick();};timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();layoutSave.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);};
+   BuildHubUI();int before=Controls.Count;BuildMapSettings();for(int i=before;i<Controls.Count;i++){Control c=Controls[i];c.Left=610+(c.Left-20)*380/550;c.Top-=732;c.Width=c.Width*380/550;}BuildOpacity();MinimalLayout();BuildKeyPicker();BuildAutoHide();BuildZoomUI();BuildSharing();BuildNavigationUI();BuildArrowSizes();BuildQuickMarkers();BuildCompactTabs();
+   timer.Interval=25;timer.Tick+=delegate{Tick();};if(!UiTest)timer.Start();FormClosing+=delegate{Stop("Закрытие");timer.Stop();layoutSave.Stop();SaveMapSettings();DisconnectHub();mini.Dispose();if(!UiTest){Native.RemoveClipboardFormatListener(Handle);for(int id=1;id<=5;id++)Native.UnregisterHotKey(Handle,id);}};
+  }
+  Panel homePanel,settingsPanel,loginPanel,connectedPanel;Button homeTab,settingsTab;Label connectionNick;
+  void MoveTo(Control c,Control parent,int x,int y,int width,int height){parent.Controls.Add(c);c.SetBounds(x,y,width,height);c.Visible=true;c.TabStop=!(c is Label);}
+  Label CompactLabel(Control parent,string text,int x,int y,int width,int height,bool bold=false){Label l=new Label{Text=text,Font=new Font("Segoe UI",bold?10:9,bold?FontStyle.Bold:FontStyle.Regular),ForeColor=bold?Color.FromArgb(145,160,171):ForeColor};MoveTo(l,parent,x,y,width,height);return l;}
+  void CompactButton(Button button,bool primary=false){StyleButton(button);button.FlatAppearance.BorderSize=primary?0:1;button.FlatAppearance.BorderColor=Color.FromArgb(43,54,63);button.BackColor=primary?Color.FromArgb(231,71,80):Color.FromArgb(21,29,35);button.Font=new Font("Segoe UI",10,primary?FontStyle.Bold:FontStyle.Regular);button.FlatAppearance.MouseOverBackColor=primary?Color.FromArgb(245,85,94):Color.FromArgb(40,51,60);button.UseVisualStyleBackColor=false;}
+  void SelectCompactTab(bool settings){homePanel.Visible=!settings;settingsPanel.Visible=settings;homeTab.BackColor=settings?Color.FromArgb(21,29,35):Color.FromArgb(42,52,61);settingsTab.BackColor=settings?Color.FromArgb(42,52,61):Color.FromArgb(21,29,35);homeTab.Font=new Font("Segoe UI",10,settings?FontStyle.Regular:FontStyle.Bold);settingsTab.Font=new Font("Segoe UI",10,settings?FontStyle.Bold:FontStyle.Regular);}
+  void UpdateConnectionLayout(){if(loginPanel==null)return;bool connected=hub!=null;loginPanel.Visible=!connected;connectedPanel.Visible=connected;connectionNick.Text=hubNick.Text.Trim()+" · HUB подключён";}
+  void BuildCompactTabs(){
+   List<Control> old=new List<Control>();foreach(Control c in Controls){old.Add(c);c.Visible=false;}
+   Func<string,Control> named=name=>old.Find(c=>c.Name==name);
+   Func<string,Button> button=text=>old.Find(c=>c is Button&&c.Text==text) as Button;
+   MinimumSize=Size.Empty;MaximumSize=Size.Empty;ClientSize=new Size(520,800);MinimumSize=MaximumSize=Size;MaximizeBox=false;AutoScroll=false;
+   CompactLabel(this,"SCUM HUB",24,20,472,36).Font=new Font("Segoe UI",22,FontStyle.Bold);CompactLabel(this,"Миникарта отряда",25,60,470,24).ForeColor=Color.FromArgb(145,160,171);
+   homeTab=new Button{Text="Главная"};settingsTab=new Button{Text="Настройки"};CompactButton(homeTab);CompactButton(settingsTab);MoveTo(homeTab,this,24,100,236,38);MoveTo(settingsTab,this,260,100,236,38);
+   homePanel=new Panel();settingsPanel=new Panel();MoveTo(homePanel,this,24,150,472,576);MoveTo(settingsPanel,this,24,150,472,576);
+   homeTab.Click+=delegate{SelectCompactTab(false);};settingsTab.Click+=delegate{SelectCompactTab(true);};
+   loginPanel=new Panel();connectedPanel=new Panel{BackColor=Color.FromArgb(18,33,29)};MoveTo(loginPanel,homePanel,0,0,472,96);MoveTo(connectedPanel,homePanel,0,0,472,96);
+   CompactLabel(loginPanel,"Ник",0,0,180,20);CompactLabel(loginPanel,"Код HUB",208,0,264,20);MoveTo(hubNick,loginPanel,0,22,192,27);MoveTo(hubCode,loginPanel,208,22,264,27);MoveTo(hubLogin,loginPanel,0,59,180,32);CompactButton(hubLogin);
+   connectionNick=CompactLabel(connectedPanel,"",14,15,320,24);connectionNick.Font=new Font("Segoe UI",10,FontStyle.Bold);Button logout=button("Отключить");MoveTo(logout,connectedPanel,346,12,112,32);CompactButton(logout);
+   // One live status control remains visible in either connection state.
+   MoveTo(hubState,homePanel,198,61,274,34);hubState.Font=new Font("Segoe UI",8);hubState.BringToFront();
+   MoveTo(toggle,homePanel,0,110,472,44);CompactButton(toggle,true);MoveTo(sharePosition,homePanel,0,164,472,25);
+   CompactLabel(homePanel,"НАВИГАТОР",0,200,220,22,true);MoveTo(navigationMode,homePanel,278,191,194,28);MoveTo(navigationGoal,homePanel,0,229,472,31);MoveTo(navigationStart,homePanel,0,272,298,36);MoveTo(navigationCancel,homePanel,310,272,162,36);
+   MoveTo(button("−"),homePanel,0,322,40,32);MoveTo(named("zoomValue"),homePanel,48,327,140,25);MoveTo(button("+"),homePanel,196,322,40,32);MoveTo(refreshMarkers,homePanel,260,322,212,32);
+   CompactLabel(homePanel,"ДОБАВИТЬ В ТЕКУЩЕЙ ПОЗИЦИИ",0,375,472,22,true);string[] categories={"stash","car","base","other"};for(int i=0;i<4;i++)MoveTo(named("quick-"+categories[i]),homePanel,i%2*242,405+i/2*44,230,36);
+   MoveTo(stashRefresh,homePanel,0,501,472,34);MoveTo(navigationState,homePanel,0,543,472,31);navigationState.Font=new Font("Segoe UI",8);
+   CompactLabel(settingsPanel,"ВНЕШНИЙ ВИД КАРТЫ",0,7,472,22,true);
+   Control[] visual={mapSize,named("mapOpacity"),named("selfArrowSize"),named("allyArrowSize")};string[] names={"Размер карты, пикс.","Непрозрачность","Своя стрелка, %","Стрелки союзников, %"};for(int i=0;i<4;i++){CompactLabel(settingsPanel,names[i],0,45+i*48,280,24);MoveTo(visual[i],settingsPanel,300,40+i*48,172,29);}
+   CompactLabel(settingsPanel,"ПОЛОЖЕНИЕ НА ЭКРАНЕ",0,246,472,22,true);CompactLabel(settingsPanel,"X",0,287,24,24);CompactLabel(settingsPanel,"Y",245,287,24,24);MoveTo(mapX,settingsPanel,28,280,192,29);MoveTo(mapY,settingsPanel,273,280,199,29);MoveTo(button("Сбросить положение"),settingsPanel,0,325,472,34);
+   CompactLabel(settingsPanel,"ОТСЛЕЖИВАНИЕ",0,385,472,22,true);CompactLabel(settingsPanel,"Режим",0,427,180,24);MoveTo(mode,settingsPanel,210,420,262,29);CompactLabel(settingsPanel,"Копирование координат",0,474,290,25);MoveTo(keyPicker,settingsPanel,316,466,156,32);MoveTo(autoHide,settingsPanel,0,519,250,28);MoveTo(button("Настроить север · F11"),settingsPanel,258,514,214,34);
+   MoveTo(state,this,24,735,472,32);state.Font=new Font("Segoe UI",8);CompactLabel(this,"↑↓ масштаб   F7 карта   F8 пауза   F9 стоп",24,777,472,20).Font=new Font("Segoe UI",8);
+   foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){Button b=c as Button;if(b!=null)CompactButton(b,b==toggle);ComboBox combo=c as ComboBox;if(combo!=null){combo.BackColor=Color.FromArgb(21,29,35);combo.ForeColor=ForeColor;combo.FlatStyle=FlatStyle.Flat;}}
+   SelectCompactTab(false);UpdateConnectionLayout();
+  }
+  internal void TestCompactUI(){
+   Show();Application.DoEvents();
+   if(ClientSize.Width!=520||ClientSize.Height!=800||!homePanel.Visible||settingsPanel.Visible||!loginPanel.Visible||connectedPanel.Visible)throw new Exception("Initial compact tab/login state incorrect");
+   if(hubNick.Parent!=loginPanel||hubCode.Parent!=loginPanel||navigationGoal.Parent!=homePanel||stashRefresh.Parent!=homePanel||mapSize.Parent!=settingsPanel||autoHide.Parent!=settingsPanel)throw new Exception("Control on wrong tab");
+   if(refreshMarkers.Top>=stashRefresh.Top||refreshMarkers.Top<=navigationStart.Top||stashRefresh.Top<=homePanel.Controls["quick-base"].Top)throw new Exception("Map controls and stash action order incorrect");
+   foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){if(c.Left<0||c.Top<0||c.Right>panel.ClientSize.Width||c.Bottom>panel.ClientSize.Height)throw new Exception("Clipped compact control: "+c.Text);}
+   settingsTab.PerformClick();Application.DoEvents();if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
+   hub=new HubClient();UpdateConnectionLayout();homeTab.PerformClick();Application.DoEvents();if(loginPanel.Visible||!connectedPanel.Visible||hubCode.Visible||!hubState.Visible)throw new Exception("Connected login collapse incorrect");
+   DisconnectHub();Application.DoEvents();if(!loginPanel.Visible||connectedPanel.Visible||!hubCode.Visible)throw new Exception("Disconnect did not restore login");
+   Close();
   }
   void Place(Control c,int x,int y,int w,int h){c.SetBounds(x,y,w,h);c.Visible=true;}
   void MinimalLayout(){
@@ -243,7 +288,7 @@ namespace ScumPositionProbe {
    ClientSize=new Size(700,900);MinimumSize=MaximumSize=new Size(716,939);state.Top=854;
    MakeLabel("ДОБАВИТЬ В ТЕКУЩЕЙ ПОЗИЦИИ",24,772,650,22,9,true);
    string[] captions={"Схрон","Машина","Вражеская база","Метка"},categories={"stash","car","base","other"};
-   for(int i=0;i<4;i++){string category=categories[i],caption=captions[i];Button add=new Button();add.Text=caption;add.SetBounds(24+i*164,800,149,34);StyleButton(add);Controls.Add(add);add.Click+=async delegate{await AddQuickMarker(category,caption);};}
+   for(int i=0;i<4;i++){string category=categories[i],caption=captions[i];Button add=new Button();add.Text=caption;add.Name="quick-"+category;add.SetBounds(24+i*164,800,149,34);StyleButton(add);Controls.Add(add);add.Click+=async delegate{await AddQuickMarker(category,caption);};}
   }
   async System.Threading.Tasks.Task AddQuickMarker(string category,string caption){
    if(creatingMarker)return;if(hub==null){state.Text="Сначала подключись к HUB.";return;}
@@ -270,7 +315,7 @@ namespace ScumPositionProbe {
    AddArrowSize(24,311,"self-arrow-size.txt",true);AddArrowSize(385,280,"ally-arrow-size.txt",false);
   }
   void AddArrowSize(int x,int width,string file,bool self){
-   NumericUpDown size=new NumericUpDown();size.SetBounds(x,726,width,29);size.Minimum=50;size.Maximum=200;size.Increment=10;int saved=100;try{int parsed;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor(file)),out parsed))saved=parsed;}catch{}size.Value=Math.Max(50,Math.Min(200,saved));
+   NumericUpDown size=new NumericUpDown();size.Name=self?"selfArrowSize":"allyArrowSize";size.SetBounds(x,726,width,29);size.Minimum=50;size.Maximum=200;size.Increment=10;int saved=100;try{int parsed;if(Int32.TryParse(File.ReadAllText(UserSettings.PathFor(file)),out parsed))saved=parsed;}catch{}size.Value=Math.Max(50,Math.Min(200,saved));
    Action apply=delegate{float scale=(float)size.Value/100f;if(self)mini.SelfArrowScale=scale;else mini.AllyArrowScale=scale;mini.Invalidate();};apply();size.ValueChanged+=delegate{apply();try{File.WriteAllText(UserSettings.PathFor(file),size.Value.ToString(CultureInfo.InvariantCulture));}catch{}};Controls.Add(size);
   }
   void BuildSharing(){sharePosition.SetBounds(24,390,320,24);sharePosition.Text="Делиться позицией с отрядом";sharePosition.Font=new Font("Segoe UI",9);sharePosition.Checked=true;sharePosition.CheckedChanged+=delegate{if(live!=null)live.Sharing=sharePosition.Checked;};Controls.Add(sharePosition);}
@@ -284,7 +329,7 @@ namespace ScumPositionProbe {
    autoHide.Top+=72;state.Top=608;
    MakeLabel("Масштаб карты · ↑ / ↓",385,352,280,22,9,false);
    Button less=new Button(),more=new Button();less.Text="−";more.Text="+";less.SetBounds(385,380,58,34);more.SetBounds(607,380,58,34);StyleButton(less);StyleButton(more);Controls.Add(less);Controls.Add(more);
-   Label value=MakeLabel("",452,386,146,25,10,false);value.TextAlign=ContentAlignment.TopCenter;
+   Label value=MakeLabel("",452,386,146,25,10,false);value.Name="zoomValue";value.TextAlign=ContentAlignment.TopCenter;
    try{double saved;if(Double.TryParse(File.ReadAllText(UserSettings.PathFor("zoom.txt")),NumberStyles.Float,CultureInfo.InvariantCulture,out saved))mini.SetZoomRadius(saved);}catch{}
    Action update=delegate{value.Text="Радиус "+mini.ViewRadius.ToString("0")+" м";};update();
    mini.ZoomChanged+=delegate{update();try{File.WriteAllText(UserSettings.PathFor("zoom.txt"),mini.ViewRadius.ToString(CultureInfo.InvariantCulture));}catch{}};
@@ -299,7 +344,7 @@ namespace ScumPositionProbe {
   }
   Label MakeLabel(string text,int x,int y,int w,int h,int size,bool bold){Label l=new Label();l.Text=text;l.SetBounds(x,y,w,h);l.Font=new Font("Segoe UI",size,bold?FontStyle.Bold:FontStyle.Regular);Controls.Add(l);return l;}
   void StyleButton(Button b){b.FlatStyle=FlatStyle.Flat;b.BackColor=Color.FromArgb(34,46,52);b.ForeColor=ForeColor;}
-  protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);Native.AddClipboardFormatListener(Handle);bool a=Native.RegisterHotKey(Handle,1,0x4000,0x77),b=Native.RegisterHotKey(Handle,2,0x4000,0x78);Native.RegisterHotKey(Handle,3,0x4000,0x76);Native.RegisterHotKey(Handle,5,0x4000,0x7A);hotkeysOk=a&&b;if(!hotkeysOk){Native.UnregisterHotKey(Handle,1);Native.UnregisterHotKey(Handle,2);state.Text="F8/F9 заняты. Закрой программу, освободившую клавиши, и запусти снова.";}}
+  protected override void OnHandleCreated(EventArgs e){base.OnHandleCreated(e);if(UiTest)return;Native.AddClipboardFormatListener(Handle);bool a=Native.RegisterHotKey(Handle,1,0x4000,0x77),b=Native.RegisterHotKey(Handle,2,0x4000,0x78);Native.RegisterHotKey(Handle,3,0x4000,0x76);Native.RegisterHotKey(Handle,5,0x4000,0x7A);hotkeysOk=a&&b;if(!hotkeysOk){Native.UnregisterHotKey(Handle,1);Native.UnregisterHotKey(Handle,2);state.Text="F8/F9 заняты. Закрой программу, освободившую клавиши, и запусти снова.";}}
   protected override void WndProc(ref Message m){if(m.Msg==0x031D&&running&&!movingWindow){uint pid;IntPtr win;if(IsGame(out pid,out win)){ReadClipboard();}}if(m.Msg==0x0231){movingWindow=true;if(live!=null)live.SendingAllowed=false;mini.PausePainting(true);ReleaseKeys();phase=0;timer.Stop();}if(m.Msg==0x0232){movingWindow=false;mini.PausePainting(false);timer.Start();}if(m.Msg==0x0312){if(m.WParam.ToInt32()==1)Toggle();if(m.WParam.ToInt32()==2)Stop("Остановлено по F9.");if(m.WParam.ToInt32()==3)ToggleMini();if(m.WParam.ToInt32()==5)CalibrateNorth();}base.WndProc(ref m);}
   void Toggle(){if(running){Stop("Остановлено по F8.");return;}if(!hotkeysOk){MessageBox.Show(this,"Не удалось зарегистрировать F8/F9. Автоматический режим не включён.");return;}
    if(mode.SelectedIndex==1&&MessageBox.Show(this,"Ты уже назначил в SCUM действие «Копировать местоположение» на выбранную клавишу? Иначе этот режим не получит координаты.","Проверка назначения",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
@@ -353,7 +398,7 @@ namespace ScumPositionProbe {
   }
   void BuildOpacity(){
    MakeLabel("Непрозрачность карты",610,320,350,25,11,true);
-   ComboBox opacity=new ComboBox();opacity.SetBounds(610,357,180,30);opacity.DropDownStyle=ComboBoxStyle.DropDownList;opacity.Items.AddRange(new object[]{"100%","75%","50%","25%"});
+   ComboBox opacity=new ComboBox();opacity.Name="mapOpacity";opacity.SetBounds(610,357,180,30);opacity.DropDownStyle=ComboBoxStyle.DropDownList;opacity.Items.AddRange(new object[]{"100%","75%","50%","25%"});
    int selected=0;try{Int32.TryParse(File.ReadAllText(UserSettings.PathFor("opacity.txt")),out selected);}catch{}selected=Math.Max(0,Math.Min(3,selected));opacity.SelectedIndex=selected;mini.SetMapOpacity(1-selected*.25);
    opacity.SelectedIndexChanged+=delegate{mini.SetMapOpacity(1-opacity.SelectedIndex*.25);try{File.WriteAllText(UserSettings.PathFor("opacity.txt"),opacity.SelectedIndex.ToString());}catch{}};Controls.Add(opacity);
   }
@@ -392,7 +437,7 @@ namespace ScumPositionProbe {
    NavigationTests.Run(lines);
    lines.Add("ALL TESTS PASSED");File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"self-test.txt"),lines.ToArray());return 0;
   }catch(Exception ex){lines.Add("FAIL "+ex.Message);File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"self-test.txt"),lines.ToArray());return 1;}}
-  [STAThread] public static void Main(string[] args){if(args.Length==5&&args[0]=="--route-check"){Environment.ExitCode=NavigationTests.ExportCheck(args);return;}if(args.Length>0&&args[0]=="--self-test"){Environment.ExitCode=SelfTest();return;}
+  [STAThread] public static void Main(string[] args){if(args.Length>0&&args[0]=="--ui-test"){ProbeForm.UiTest=true;try{Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);using(ProbeForm testForm=new ProbeForm())testForm.TestCompactUI();Console.WriteLine("COMPACT UI TESTS PASSED");}catch(Exception ex){Console.WriteLine(ex.ToString());Environment.ExitCode=1;}return;}if(args.Length==5&&args[0]=="--route-check"){Environment.ExitCode=NavigationTests.ExportCheck(args);return;}if(args.Length>0&&args[0]=="--self-test"){Environment.ExitCode=SelfTest();return;}
    Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);ProbeForm form=new ProbeForm();Application.ThreadException+=delegate(object sender,System.Threading.ThreadExceptionEventArgs e){form.Abort("Ошибка; считывание остановлено.");MessageBox.Show("Ошибка: "+e.Exception.Message+"\nЗакрой программу и отправь описание ошибки.");Application.Exit();};Application.Run(form);
   }
  }
