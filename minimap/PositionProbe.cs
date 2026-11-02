@@ -32,6 +32,25 @@ namespace ScumPositionProbe {
    if(Focused&&ShowFocusCues)ControlPaint.DrawFocusRectangle(e.Graphics,Rectangle.Inflate(ClientRectangle,-5,-5),ForeColor,fill);
   }
  }
+ public sealed class DarkComboBox:ComboBox {
+  public string EmptyText="Выбери значение";
+  public DarkComboBox(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);DrawMode=DrawMode.OwnerDrawFixed;FlatStyle=FlatStyle.Flat;BackColor=Color.FromArgb(17,25,30);ForeColor=Color.FromArgb(237,241,243);IntegralHeight=false;MaxDropDownItems=10;DropDownHeight=240;ItemHeight=23;}
+  protected override void OnSizeChanged(EventArgs e){base.OnSizeChanged(e);DropDownWidth=Math.Max(1,Width);}
+  protected override void OnSelectedIndexChanged(EventArgs e){base.OnSelectedIndexChanged(e);Invalidate();}
+  protected override void OnEnabledChanged(EventArgs e){base.OnEnabledChanged(e);Invalidate();}
+  protected override void OnPaint(PaintEventArgs e){
+   e.Graphics.Clear(BackColor);Rectangle text=new Rectangle(3,0,Math.Max(1,Width-30),Height);
+   Color ink=Enabled?ForeColor:Color.FromArgb(128,143,151);
+   if(SelectedIndex>=0)OnDrawItem(new DrawItemEventArgs(e.Graphics,Font,text,SelectedIndex,DrawItemState.ComboBoxEdit,ink,BackColor));
+   else TextRenderer.DrawText(e.Graphics,EmptyText,Font,text,ink,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
+   e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;float x=Width-14,y=Height/2f;using(Pen pen=new Pen(ink,1.5f))e.Graphics.DrawLines(pen,new PointF[]{new PointF(x-4,y-2),new PointF(x,y+2),new PointF(x+4,y-2)});
+  }
+  protected override void OnDrawItem(DrawItemEventArgs e){
+   if(e.Index<0||e.Index>=Items.Count)return;bool selected=(e.State&DrawItemState.Selected)!=0;using(SolidBrush brush=new SolidBrush(selected?Color.FromArgb(43,59,69):BackColor))e.Graphics.FillRectangle(brush,e.Bounds);
+   TextRenderer.DrawText(e.Graphics,GetItemText(Items[e.Index]),Font,Rectangle.Inflate(e.Bounds,-4,0),Enabled?ForeColor:Color.FromArgb(128,143,151),TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
+   base.OnDrawItem(e);
+  }
+ }
  public sealed class RoundedFieldFrame:Panel {
   readonly Control field;
   public RoundedFieldFrame(Control input){field=input;BackColor=Color.FromArgb(17,25,30);SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);TextBox text=input as TextBox;if(text!=null)text.BorderStyle=BorderStyle.None;NumericUpDown number=input as NumericUpDown;if(number!=null)number.BorderStyle=BorderStyle.None;Controls.Add(field);field.Enter+=delegate{Invalidate();};field.Leave+=delegate{Invalidate();};}
@@ -89,7 +108,7 @@ namespace ScumPositionProbe {
   internal static bool UiTest;
   AllyLive live;readonly CheckBox sharePosition=new CheckBox();
   readonly MiniMapForm mini=new MiniMapForm();HubClient hub;int hubGeneration;bool syncing;readonly Button refreshMarkers=new RoundedButton();
-  readonly TextBox hubNick=new TextBox(),hubCode=new TextBox();readonly ComboBox hubRole=new ComboBox();readonly CheckBox adminLogin=new CheckBox();readonly Label hubState=new Label();readonly Button hubLogin=new RoundedButton();
+  readonly TextBox hubNick=new TextBox(),hubCode=new TextBox();readonly ComboBox hubRole=new DarkComboBox();readonly CheckBox adminLogin=new CheckBox();readonly Label hubState=new Label();readonly Button hubLogin=new RoundedButton();
   void BuildHubUI(){
    MakeLabel("МЕТКИ SCUM HUB · обновление по кнопке",20,562,550,25,10,true);
    MakeLabel("Ник",20,593,130,20,9,false);MakeLabel("Роль",170,593,130,20,9,false);MakeLabel("Код входа",325,593,240,20,9,false);
@@ -129,7 +148,7 @@ namespace ScumPositionProbe {
 
   readonly Timer timer=new Timer();readonly Stopwatch clock=Stopwatch.StartNew();
   readonly Label state=new Label(),positionLabel=new Label(),metrics=new Label(),foregroundLabel=new Label();
-  readonly Button toggle=new RoundedButton();readonly NumericUpDown interval=new NumericUpDown();readonly ComboBox mode=new ComboBox();
+  readonly Button toggle=new RoundedButton();readonly NumericUpDown interval=new NumericUpDown();readonly ComboBox mode=new DarkComboBox();
   readonly CheckBox top=new CheckBox();
   ushort copyKey=0x79;readonly Button keyPicker=new RoundedButton();bool movingWindow;
   bool running,ctrlOwned,keyOwned,hotkeysOk;long nextUi,nextFocus;uint cachedPid;IntPtr cachedWindow;bool cachedActive;ushort ownedKey;int phase;uint oldSequence,gamePid;
@@ -200,7 +219,10 @@ namespace ScumPositionProbe {
    foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){if(c.Left<0||c.Top<0||c.Right>panel.ClientSize.Width||c.Bottom>panel.ClientSize.Height)throw new Exception("Clipped compact control: "+c.Text);}
    if(settingsTab.Left-homeTab.Right!=12)throw new Exception("Tab gap missing");
    if(!(toggle is RoundedButton)||toggle.Region==null||toggle.Region.IsVisible(0,0)||!toggle.Region.IsVisible(toggle.Width/2,toggle.Height/2)||!(mapSize.Parent is RoundedFieldFrame))throw new Exception("Rounded control rendering missing");
-   settingsTab.PerformClick();Application.DoEvents();if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
+   if(navigationGoal.Enabled||navigationGoal.DroppedDown)throw new Exception("Empty destination selector must be disabled");
+   settingsTab.PerformClick();Application.DoEvents();
+   foreach(ComboBox combo in new ComboBox[]{mode,(ComboBox)settingsPanel.Controls.Find("mapOpacity",true)[0]}){if(!(combo is DarkComboBox)||combo.DropDownWidth!=combo.Width||combo.DropDownHeight>240)throw new Exception("Selector style/geometry incorrect");combo.DroppedDown=true;Application.DoEvents();if(!combo.DroppedDown)throw new Exception("Selector did not open");combo.DroppedDown=false;using(Bitmap image=new Bitmap(combo.Width,combo.Height)){combo.DrawToBitmap(image,combo.ClientRectangle);Color pixel=image.GetPixel(combo.Width-3,combo.Height/2);if(pixel.R>190&&pixel.G>190&&pixel.B>190)throw new Exception("White native selector chrome leaked");}}
+   if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
    hub=new HubClient();UpdateConnectionLayout();homeTab.PerformClick();Application.DoEvents();if(loginPanel.Visible||!connectedPanel.Visible||hubCode.Visible||!hubState.Visible)throw new Exception("Connected login collapse incorrect");
    DisconnectHub();Application.DoEvents();if(!loginPanel.Visible||connectedPanel.Visible||!hubCode.Visible)throw new Exception("Disconnect did not restore login");
    Close();
@@ -235,7 +257,7 @@ namespace ScumPositionProbe {
     case "Стоп · F9":Place(c,185,496,150,40);break;
    }}
   }
-  readonly ComboBox navigationMode=new ComboBox();readonly ComboBox navigationGoal=new ComboBox();readonly Button navigationStart=new RoundedButton(),navigationCancel=new RoundedButton(),stashRefresh=new RoundedButton();bool refreshingStash;readonly Label navigationState=new Label();
+  readonly ComboBox navigationMode=new DarkComboBox();readonly ComboBox navigationGoal=new DarkComboBox();readonly Button navigationStart=new RoundedButton(),navigationCancel=new RoundedButton(),stashRefresh=new RoundedButton();bool refreshingStash;readonly Label navigationState=new Label();
   internal sealed class NavigationChoice {public HubMarker Marker;public string Header;public double? MetresAway;public override string ToString(){return Marker==null?Header:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y)+(MetresAway.HasValue?" · "+RoadGeometry.Metres(MetresAway.Value):"");}}
   bool navigationListUpdating;int lastNavigationIndex=-1;
   static int NavigationGroup(HubMarker marker){return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
@@ -256,7 +278,7 @@ namespace ScumPositionProbe {
    }lastNavigationIndex=index;UpdateNavigationState();
   }
   void DrawNavigationChoice(object sender,DrawItemEventArgs e){
-   if(e.Index<0)return;NavigationChoice row=(NavigationChoice)navigationGoal.Items[e.Index];bool header=row.Marker==null;e.DrawBackground();
+   if(e.Index<0)return;NavigationChoice row=(NavigationChoice)navigationGoal.Items[e.Index];bool header=row.Marker==null;using(SolidBrush fill=new SolidBrush((e.State&DrawItemState.Selected)!=0?Color.FromArgb(43,59,69):navigationGoal.BackColor))e.Graphics.FillRectangle(fill,e.Bounds);
    if(header){using(SolidBrush b=new SolidBrush(Color.FromArgb(24,33,38)))e.Graphics.FillRectangle(b,e.Bounds);}
    bool closed=(e.State&DrawItemState.ComboBoxEdit)!=0;Rectangle bounds=e.Bounds;bounds.X+=header||closed?6:16;bounds.Width-=header||closed?10:20;
    using(Font font=new Font(navigationGoal.Font,header?FontStyle.Bold:FontStyle.Regular)){Color color=header?Color.FromArgb(245,132,136):((e.State&DrawItemState.Selected)!=0?SystemColors.HighlightText:navigationGoal.ForeColor);TextRenderer.DrawText(e.Graphics,closed&&row.Marker!=null?row.Marker.Name+" · "+MapMath.Sector(row.Marker.X,row.Marker.Y):row.ToString(),font,bounds,color,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);}
@@ -267,8 +289,8 @@ namespace ScumPositionProbe {
    MakeLabel("НАВИГАТОР",24,549,145,22,10,true);
    navigationMode.SetBounds(172,546,163,25);navigationMode.DropDownStyle=ComboBoxStyle.DropDownList;navigationMode.Items.AddRange(new object[]{"На машине","Пешком"});navigationMode.SelectedIndex=0;Controls.Add(navigationMode);
    navigationMode.SelectedIndexChanged+=async delegate{mini.Navigation.Mode=navigationMode.SelectedIndex==1?TravelMode.Foot:TravelMode.Car;string id=mini.Navigation.GoalId;HubMarker goal=mini.Markers.Find(m=>m.Id==id);if(goal!=null&&mini.Current!=null)await mini.Navigation.Plan(mini.Current,goal);};
-   navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownWidth=580;navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.DrawMode=DrawMode.OwnerDrawFixed;navigationGoal.ItemHeight=23;navigationGoal.DrawItem+=DrawNavigationChoice;navigationGoal.SelectedIndexChanged+=delegate{NavigationSelectionChanged();};Controls.Add(navigationGoal);
-   navigationGoal.DropDown+=delegate{RebuildNavigationChoices();BeginInvoke((Action)delegate{if(!IsDisposed&&navigationGoal.DroppedDown)Native.SendMessage(navigationGoal.Handle,0x015c,IntPtr.Zero,IntPtr.Zero);});};
+   navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.DrawMode=DrawMode.OwnerDrawFixed;navigationGoal.ItemHeight=23;navigationGoal.DrawItem+=DrawNavigationChoice;navigationGoal.SelectedIndexChanged+=delegate{NavigationSelectionChanged();};Controls.Add(navigationGoal);
+   navigationGoal.DropDown+=delegate{RebuildNavigationChoices();if(!navigationGoal.Enabled){navigationGoal.DroppedDown=false;return;}BeginInvoke((Action)delegate{if(!IsDisposed&&navigationGoal.DroppedDown)Native.SendMessage(navigationGoal.Handle,0x015c,IntPtr.Zero,IntPtr.Zero);});};
    mini.ZoomChanged+=delegate{if(!navigationGoal.DroppedDown)RebuildNavigationChoices();};
    navigationStart.Text="Проложить маршрут";navigationStart.SetBounds(24,617,192,34);StyleButton(navigationStart);Controls.Add(navigationStart);
    navigationCancel.Text="Отменить";navigationCancel.SetBounds(228,617,107,34);StyleButton(navigationCancel);Controls.Add(navigationCancel);
@@ -303,7 +325,7 @@ namespace ScumPositionProbe {
    catch(Exception ex){if(!IsDisposed&&hub==current&&generation==hubGeneration)state.Text=ex.Message;}
    finally{refreshingStash=false;if(!IsDisposed){stashRefresh.Text="Обновить схрон · 14 дней";UpdateNavigationState();}}
   }
-  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
+  void UpdateNavigationState(){navigationGoal.Enabled=navigationGoal.Items.Count>0;((DarkComboBox)navigationGoal).EmptyText=hub==null?"Подключись к HUB, чтобы выбрать метку":"Нет доступных меток";navigationGoal.Invalidate();navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
   void RebuildNavigationChoices(){
    NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
    navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
@@ -431,7 +453,7 @@ namespace ScumPositionProbe {
   }
   void BuildOpacity(){
    MakeLabel("Непрозрачность карты",610,320,350,25,11,true);
-   ComboBox opacity=new ComboBox();opacity.Name="mapOpacity";opacity.SetBounds(610,357,180,30);opacity.DropDownStyle=ComboBoxStyle.DropDownList;opacity.Items.AddRange(new object[]{"100%","75%","50%","25%"});
+   ComboBox opacity=new DarkComboBox();opacity.Name="mapOpacity";opacity.SetBounds(610,357,180,30);opacity.DropDownStyle=ComboBoxStyle.DropDownList;opacity.Items.AddRange(new object[]{"100%","75%","50%","25%"});
    int selected=0;try{Int32.TryParse(File.ReadAllText(UserSettings.PathFor("opacity.txt")),out selected);}catch{}selected=Math.Max(0,Math.Min(3,selected));opacity.SelectedIndex=selected;mini.SetMapOpacity(1-selected*.25);
    opacity.SelectedIndexChanged+=delegate{mini.SetMapOpacity(1-opacity.SelectedIndex*.25);try{File.WriteAllText(UserSettings.PathFor("opacity.txt"),opacity.SelectedIndex.ToString());}catch{}};Controls.Add(opacity);
   }
