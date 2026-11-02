@@ -213,7 +213,7 @@ namespace ScumPositionProbe {
   }
   internal void TestCompactUI(){
    Show();Application.DoEvents();
-   if(ClientSize.Width!=520||ClientSize.Height!=800||!homePanel.Visible||settingsPanel.Visible||!loginPanel.Visible||connectedPanel.Visible)throw new Exception("Initial compact tab/login state incorrect");
+   if(ClientSize.Width!=520||ClientSize.Height!=800||!homePanel.Visible||settingsPanel.Visible||!loginPanel.Visible||connectedPanel.Visible)throw new Exception("Initial compact tab/login state incorrect: client="+ClientSize+", home="+homePanel.Visible+", settings="+settingsPanel.Visible+", login="+loginPanel.Visible+", connected="+connectedPanel.Visible+", desktop="+Screen.PrimaryScreen.WorkingArea);
    if(hubNick.Parent.Parent!=loginPanel||hubCode.Parent.Parent!=loginPanel||navigationGoal.Parent.Parent!=homePanel||stashRefresh.Parent!=homePanel||mapSize.Parent.Parent!=settingsPanel||autoHide.Parent!=settingsPanel)throw new Exception("Control on wrong tab");
    if(refreshMarkers.Top>=stashRefresh.Top||refreshMarkers.Top<=navigationStart.Top||stashRefresh.Top<=homePanel.Controls["quick-base"].Top)throw new Exception("Map controls and stash action order incorrect");
    foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){if(c.Left<0||c.Top<0||c.Right>panel.ClientSize.Width||c.Bottom>panel.ClientSize.Height)throw new Exception("Clipped compact control: "+c.Text);}
