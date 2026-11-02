@@ -61,7 +61,7 @@ namespace ScumPositionProbe {
    MakeLabel("Ник",20,593,130,20,9,false);MakeLabel("Роль",170,593,130,20,9,false);MakeLabel("Код входа",325,593,240,20,9,false);
    hubNick.SetBounds(20,615,135,27);hubNick.Text="k1t0";Controls.Add(hubNick);
    hubRole.SetBounds(170,615,140,27);hubRole.DropDownStyle=ComboBoxStyle.DropDownList;hubRole.Items.AddRange(new object[]{"Rifler","Sniper","Bomber","Locker","Builder","Helper"});hubRole.SelectedIndex=0;Controls.Add(hubRole);
-   hubCode.SetBounds(325,615,245,27);hubCode.UseSystemPasswordChar=true;Controls.Add(hubCode);
+   hubCode.SetBounds(325,615,245,27);hubCode.UseSystemPasswordChar=false;Controls.Add(hubCode);
    adminLogin.SetBounds(20,649,550,24);adminLogin.Text="Личный вход администратора (код тот же, что на сайте)";adminLogin.Checked=true;Controls.Add(adminLogin);
    hubLogin.SetBounds(20,682,170,34);hubLogin.Text="Подключить HUB";StyleButton(hubLogin);hubLogin.Click+=async delegate{await LoginHub();};Controls.Add(hubLogin);
    Button logout=new Button();logout.SetBounds(200,682,110,34);logout.Text="Отключить";StyleButton(logout);logout.Click+=delegate{DisconnectHub();};Controls.Add(logout);
