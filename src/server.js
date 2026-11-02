@@ -275,6 +275,8 @@ async function processDiscordNotifications() {
     const memberById = new Map(members.map(m=>[m.id,m]));
     const prefById = new Map(prefs.map(p=>[p.member_id,p]));
     for (const event of events.reverse()) {
+      // Do not deliver protect-expiry warnings already queued before the reminder was disabled.
+      if (String(event.source_key || '').startsWith('protect-warning:') || String(event.title || '').trim() === 'ПРОТЕКТ СКОРО СПАДЁТ') { stats.ignoredCategory++; continue; }
       // Map publication announcements are disabled; expiry reminders stay enabled.
       const mapPublication = ['base','stash','other'].includes(String(event.category || '').toLowerCase())
         && (String(event.source_key || '').startsWith('squad-place:')
