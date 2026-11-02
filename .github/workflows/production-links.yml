@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: compact Home and Settings tabs with map controls above quick actions and stash refresh below
+# Approved release: compact tabs with dark inputs and platform-independent UI smoke checks
 on:
   push:
     branches: [scum-hub-migration]
