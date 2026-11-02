@@ -1154,7 +1154,10 @@ async function importDiscordMapMessage(message, confirmed=false, confirmationMes
       content:'📍 **'+markerNames[markerType]+' добавлен(а) на карту SCUM HUB**\nДобавил: **'+String(member.nick||'Участник').slice(0,80)+'**\nКоординаты: X='+X+' Y='+Y+' Z='+Z,
       ...(confirmationMessageId?{}:{message_reference:{type:0,message_id:mid,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false}}),
       allowed_mentions:{parse:[]},
-      components:[{type:1,components:[{type:2,style:5,label:'🗺️ Открыть карту',url:homepage.replace(/\/?(?:\?.*)?$/,'/')+'?section=map'}]}]
+      components:[{type:1,components:[
+        {type:2,style:2,label:'👁️ Просмотр',custom_id:'fury:map-preview:'+mid},
+        {type:2,style:5,label:'🗺️ Открыть карту',url:homepage.replace(/\/?(?:\?.*)?$/,'/')+'?section=map'}
+      ]}]
     }),
     signal:AbortSignal.timeout(10000)
   });
