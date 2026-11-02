@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -86,7 +86,7 @@ namespace ScumPositionProbe {
    name=(name??"").Trim();if(name.Length==0||name.Length>70||name.IndexOfAny(new char[]{'\r','\n'})>=0)throw new ArgumentException("Введи название от 1 до 70 символов в одну строку.");
    if(position==null)throw new ArgumentException("Нет позиции игрока.");double x=MapMath.NormX(position.X),y=MapMath.NormY(position.Y);
    if(Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1)throw new ArgumentException("Координаты за пределами карты.");
-   if(category=="car")return new Dictionary<string,object>{{"table","squad_map_markers"},{"action","insert"},{"values",new Dictionary<string,object>{{"x",x},{"y",y},{"type","vehicle"},{"name",name},{"note",""},{"icon","🚗"},{"color","#4aa5e6"},{"size",30},{"show_label",true},{"locked",false}}}};
+   if(category=="car")return new Dictionary<string,object>{{"table","squad_map_markers"},{"action","insert"},{"values",new Dictionary<string,object>{{"id","minimap-"+Guid.NewGuid().ToString("N")},{"x",x},{"y",y},{"type","vehicle"},{"name",name},{"note",""},{"icon","🚗"},{"color","#4aa5e6"},{"size",30},{"show_label",true},{"locked",false}}}};
    string title=name;
    return new Dictionary<string,object>{{"table","squad_place_posts"},{"action","insert"},{"values",new Dictionary<string,object>{{"kind",category},{"images",new object[0]},{"map_marker_name",title},{"comment",title+"\nКоординаты: X="+position.X.ToString("R",CultureInfo.InvariantCulture)+" Y="+position.Y.ToString("R",CultureInfo.InvariantCulture)+"\nИсточник: Миникарта SCUM HUB"}}}};
   }
@@ -143,7 +143,7 @@ namespace ScumPositionProbe {
      HubSnapshot snapshot;string title="Проверка";
      if(category=="car"){
       if((string)handler.Last["table"]!="squad_map_markers"||(string)values["type"]!="vehicle"||(string)values["icon"]!="🚗"||(string)values["color"]!="#4aa5e6"||values.ContainsKey("kind"))throw new Exception("Car must be a transport marker, not a base publication");
-      var row=new Dictionary<string,object>(values);row["id"]="vehicle-test";snapshot=Parse(serializer.Serialize(new {posts=new object[0],markers=new object[]{row}}));
+      if(!((string)values["id"]).StartsWith("minimap-",StringComparison.Ordinal))throw new Exception("Mini-map vehicle origin missing");var row=new Dictionary<string,object>(values);row["id"]="vehicle-test";snapshot=Parse(serializer.Serialize(new {posts=new object[0],markers=new object[]{row}}));
       if(snapshot.Markers.Count!=1||snapshot.Markers[0].Kind!="vehicle"||snapshot.Markers[0].Color.ToArgb()!=ColorTranslator.FromHtml("#4aa5e6").ToArgb()||CanRefreshStash(snapshot.Markers[0]))throw new Exception("Vehicle type, colour or stash separation lost");
      }else{
       if((string)values["kind"]!=category||(string)handler.Last["table"]!="squad_place_posts")throw new Exception("Publication kind changed");
