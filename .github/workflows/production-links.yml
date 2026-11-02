@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: ally reconnection build; align reminder test with removed protect warning
+# Approved release: latest-only ally frames, send before painting and client latency diagnostics
 on:
   push:
     branches: [scum-hub-migration]
