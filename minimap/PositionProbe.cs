@@ -201,14 +201,31 @@ namespace ScumPositionProbe {
    mini.Navigation.Changed+=delegate{if(!IsDisposed){UpdateNavigationState();mini.Invalidate();}};
    UpdateNavigationState();
   }
+  internal static List<NavigationChoice> VisibleStashes(List<HubMarker> markers,Position current,double radius,int width,int height){
+   List<NavigationChoice> result=new List<NavigationChoice>();if(current==null)return result;PointF origin=RoadGeometry.FromPosition(current);
+   foreach(HubMarker marker in markers)if(HubClient.CanRefreshStash(marker)&&MapMath.MarkerInView(marker,current,radius,width,height))result.Add(new NavigationChoice{Marker=marker,MetresAway=RoadGeometry.Distance(origin,new PointF((float)marker.X,(float)marker.Y))});
+   result.Sort((a,b)=>{int order=a.MetresAway.Value.CompareTo(b.MetresAway.Value);return order!=0?order:StringComparer.CurrentCultureIgnoreCase.Compare(a.Marker.Name,b.Marker.Name);});return result;
+  }
   async System.Threading.Tasks.Task RefreshSelectedStash(){
-   NavigationChoice choice=navigationGoal.SelectedItem as NavigationChoice;if(refreshingStash||hub==null||choice==null||!HubClient.CanRefreshStash(choice.Marker))return;
-   HubMarker marker=choice.Marker;HubClient current=hub;int generation=hubGeneration;refreshingStash=true;stashRefresh.Text="Обновляю…";UpdateNavigationState();
-   try{await current.RefreshStash(marker);if(IsDisposed||hub!=current||generation!=hubGeneration)return;await RefreshHub();if(!IsDisposed)state.Text="Схрон «"+marker.Name+"» обновлён на 14 дней.";}
+   if(refreshingStash||hub==null)return;if(mini.Current==null){state.Text="Сначала получи позицию в игре, чтобы найти схроны на миникарте.";return;}
+   List<NavigationChoice> choices=VisibleStashes(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height);
+   if(choices.Count==0){state.Text="В видимой области миникарты нет схронов с таймером. Увеличь обзор или подойди ближе.";return;}
+   HubClient current=hub;int generation=hubGeneration;HubMarker marker=null;refreshingStash=true;UpdateNavigationState();
+   try{
+    using(Form dialog=new Form()){
+     dialog.Text="Обновить схрон";dialog.ClientSize=new Size(460,315);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;dialog.MaximizeBox=dialog.MinimizeBox=false;dialog.StartPosition=FormStartPosition.CenterParent;dialog.BackColor=BackColor;dialog.ForeColor=ForeColor;dialog.Font=new Font("Segoe UI",9);
+     dialog.Controls.Add(new Label{Text="Схроны в видимой области миникарты · ближайшие сверху",Location=new Point(16,16),Size=new Size(428,36)});
+     ListBox list=new ListBox{Location=new Point(16,56),Size=new Size(428,174),BackColor=Color.FromArgb(34,46,52),ForeColor=ForeColor,HorizontalScrollbar=true};foreach(NavigationChoice choice in choices)list.Items.Add(choice);list.SelectedIndex=0;dialog.Controls.Add(list);
+     Button update=new Button{Text="Обновить · 14 дней",DialogResult=DialogResult.OK,Location=new Point(16,257),Size=new Size(206,36)},cancel=new Button{Text="Отмена",DialogResult=DialogResult.Cancel,Location=new Point(238,257),Size=new Size(206,36)};StyleButton(update);StyleButton(cancel);dialog.Controls.Add(update);dialog.Controls.Add(cancel);dialog.AcceptButton=update;dialog.CancelButton=cancel;
+     if(dialog.ShowDialog(this)!=DialogResult.OK)return;NavigationChoice selected=list.SelectedItem as NavigationChoice;if(selected==null)return;marker=selected.Marker;
+    }
+    if(IsDisposed||hub!=current||generation!=hubGeneration)return;stashRefresh.Text="Обновляю…";
+    await current.RefreshStash(marker);if(IsDisposed||hub!=current||generation!=hubGeneration)return;await RefreshHub();if(!IsDisposed)state.Text="Схрон «"+marker.Name+"» обновлён на 14 дней.";
+   }
    catch(Exception ex){if(!IsDisposed&&hub==current&&generation==hubGeneration)state.Text=ex.Message;}
    finally{refreshingStash=false;if(!IsDisposed){stashRefresh.Text="Обновить схрон · 14 дней";UpdateNavigationState();}}
   }
-  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash&&selected!=null&&HubClient.CanRefreshStash(selected.Marker);}
+  void UpdateNavigationState(){navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
   void RebuildNavigationChoices(){
    NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
    navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}

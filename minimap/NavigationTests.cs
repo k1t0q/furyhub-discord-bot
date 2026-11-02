@@ -40,6 +40,14 @@ namespace ScumPositionProbe {
    Check(MapMath.MarkerInView(near,viewer,500,320,320)&&MapMath.MarkerInView(corner,viewer,500,320,320),"nearby section matches visible square, including corners outside circular radius");
    Check(!MapMath.MarkerInView(edge,viewer,500,320,320)&&MapMath.MarkerInView(edge,viewer,1000,320,320),"nearby section responds to zoom");
    Check(!MapMath.MarkerInView(footer,viewer,500,320,320)&&!MapMath.MarkerInView(near,null,500,320,320),"footer and missing position are excluded");
+   HubMarker stashNear=Goal(.501f,.5f);stashNear.Id="stash-post-1";stashNear.Kind="stash";
+   HubMarker stashCorner=Goal((float)(.5+half*.9),(float)(.5-half*.9));stashCorner.Id="stash-post-2";stashCorner.Kind="stash";
+   HubMarker stashFar=Goal(.7f,.7f);stashFar.Id="stash-post-3";stashFar.Kind="stash";
+   HubMarker stashEdge=Goal((float)(.5+half*1.05),.5f);stashEdge.Id="stash-post-4";stashEdge.Kind="stash";
+   var stashMarkers=new List<HubMarker>{stashFar,stashCorner,near,stashNear,stashEdge};var visibleStashes=ProbeForm.VisibleStashes(stashMarkers,viewer,500,320,320);
+   Check(visibleStashes.Count==2&&visibleStashes[0].Marker.Id==stashNear.Id&&visibleStashes[1].Marker.Id==stashCorner.Id&&visibleStashes[0].MetresAway.HasValue,"stash picker uses visible viewport and distance, excludes bases and distant stashes");
+   Check(ProbeForm.VisibleStashes(stashMarkers,viewer,1000,320,320).Count==3&&ProbeForm.VisibleStashes(stashMarkers,null,1000,320,320).Count==0,"stash picker follows zoom and handles missing position");
+   var movedStashes=ProbeForm.VisibleStashes(stashMarkers,World(.7f,.7f),500,320,320);Check(movedStashes.Count==1&&movedStashes[0].Marker.Id==stashFar.Id,"stash picker follows player movement");results.Add("PASS nearby stash picker, exact viewport, nearest-first distances, zoom, movement and type filtering");
    var destinations=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{farMarker,corner,near},viewer,500,320,320);
    Check(destinations[0].Header=="НА МИНИКАРТЕ"&&destinations[1].Marker.Id=="near"&&destinations[2].Marker.Id=="corner","visible destinations lead the list sorted by distance");
    Check(destinations.FindAll(row=>row.Marker!=null&&row.Marker.Id=="near").Count==2&&destinations.Exists(row=>row.Header=="СХРОНЫ")&&destinations.Exists(row=>row.Header=="БАЗЫ")&&destinations.Exists(row=>row.Header=="ДРУГОЕ"),"complete category lists remain available below nearby shortcuts");
