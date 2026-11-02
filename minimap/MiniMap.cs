@@ -65,7 +65,7 @@ namespace ScumPositionProbe {
    DrawNavigation(g,field,left,top,span);
    foreach(HubMarker marker in Markers){float x=(float)(field.Left+(marker.X-left)/span*size),y=(float)(field.Top+(marker.Y-top)/span*size);if(x<field.Left-20||x>field.Right+20||y<field.Top-20||y>field.Bottom+20)continue;
     using(SolidBrush b=new SolidBrush(marker.Color))g.FillEllipse(b,x-4,y-4,8,8);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),2))g.DrawEllipse(p,x-4,y-4,8,8);
-    if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,x+7,y-7,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,x+9,y-7);}}
+    if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);float labelX=Math.Max(field.Left+2,Math.Min(field.Right-text.Width-6,x-text.Width/2-2)),labelY=y-text.Height-8;using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,labelX,labelY,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,labelX+2,labelY);}}
    }
    List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
    DateTime alliesNow=DateTime.UtcNow;
