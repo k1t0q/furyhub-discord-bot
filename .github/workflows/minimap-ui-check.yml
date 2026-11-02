@@ -26,3 +26,20 @@ jobs:
           cat minimap/self-test.txt
           sha256sum minimap/SCUM_HUB_MiniMap.exe
           node --check src/server.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minimap-interface-executable
+          path: minimap/SCUM_HUB_MiniMap.exe
+  windows-interface:
+    needs: inspect
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: minimap-interface-executable
+      - name: Check real Windows controls
+        shell: pwsh
+        run: |
+          $process = Start-Process .\\SCUM_HUB_MiniMap.exe -ArgumentList '--ui-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Windows UI check failed: $($process.ExitCode)" }
