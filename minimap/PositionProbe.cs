@@ -10,6 +10,10 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace ScumPositionProbe {
+ public sealed class ZoomKeys {
+  bool held;long repeatAt;
+  public int Update(bool allowed,bool up,bool down,long now){if(!allowed||up==down){held=false;return 0;}if(held&&now<repeatAt)return 0;repeatAt=now+(held?150:400);held=true;return up?1:-1;}
+ }
  public static class MapVisibility {public static bool ShouldShow(bool wanted,bool menuHidden,bool allowedFocus){return wanted&&!menuHidden&&allowedFocus;}}
  public static class UserSettings {
   public static string PathFor(string name){string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"SCUM HUB");Directory.CreateDirectory(root);string path=Path.Combine(root,name);string old=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,name);if(!File.Exists(path)&&File.Exists(old))File.Copy(old,path,false);return path;}
@@ -218,7 +222,7 @@ namespace ScumPositionProbe {
    ClientSize=new Size(700,650);MinimumSize=MaximumSize=new Size(716,689);
    foreach(Control c in Controls){if(c is Button&&(c.Text=="Показать / скрыть карту · F7"||c.Text=="Сбросить положение"||c.Text=="Настроить север · F11"))c.Top+=72;}
    autoHide.Top+=72;state.Top=608;
-   MakeLabel("Масштаб карты",385,352,280,22,9,false);
+   MakeLabel("Масштаб карты · ↑ / ↓",385,352,280,22,9,false);
    Button less=new Button(),more=new Button();less.Text="−";more.Text="+";less.SetBounds(385,380,58,34);more.SetBounds(607,380,58,34);StyleButton(less);StyleButton(more);Controls.Add(less);Controls.Add(more);
    Label value=MakeLabel("",452,386,146,25,10,false);value.TextAlign=ContentAlignment.TopCenter;
    try{double saved;if(Double.TryParse(File.ReadAllText(UserSettings.PathFor("zoom.txt")),NumberStyles.Float,CultureInfo.InvariantCulture,out saved))mini.SetZoomRadius(saved);}catch{}
@@ -246,11 +250,13 @@ namespace ScumPositionProbe {
   bool IsGame(out uint pid,out IntPtr window){window=Native.GetForegroundWindow();Native.GetWindowThreadProcessId(window,out pid);if(pid==0)return false;try{using(Process p=Process.GetProcessById((int)pid)){return Native.IsScumName(p.ProcessName);}}catch{return false;}}
   bool InputBusy(){int[] keys={0x10,0x11,0x12,0x5B,0x5C,0x01,0x02,copyKey};foreach(int k in keys)if(Native.Down(k))return true;return false;}
   void ReleaseKeys(){List<Native.INPUT> keys=new List<Native.INPUT>();if(keyOwned)keys.Add(Native.Key(ownedKey,true));if(ctrlOwned)keys.Add(Native.Key(0x11,true));if(keys.Count>0)Native.Send(keys.ToArray());keyOwned=ctrlOwned=false;}
+  readonly ZoomKeys zoomKeys=new ZoomKeys();
+  void UpdateZoomKeys(long now){uint pid;IntPtr window;bool allowed=!movingWindow&&mapWanted&&mini.Visible&&IsGame(out pid,out window)&&!Native.CursorVisible()&&!Native.Down(0x10)&&!Native.Down(0x11)&&!Native.Down(0x12);int direction=zoomKeys.Update(allowed,Native.Down(0x26),Native.Down(0x28),now);if(direction!=0)mini.ChangeZoom(direction>0);}
   void Tick(){
    long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(!movingWindow&&now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
    metrics.Text="Попытки: "+attempts+"   Получено: "+successes+"   Изменений: "+changes+"   Нет ответа: "+timeouts+"\r\nПоследние координаты: "+(lastSuccess<0?"ещё не получены":((now-lastSuccess)/1000.0).ToString("0.0")+" с назад")+"   Пропуски ввода: "+blocked;
    }
-   UpdateMenuVisibility(active,now);if(live!=null)live.SendingAllowed=running&&active&&!menuCursor&&!movingWindow;
+   UpdateMenuVisibility(active,now);UpdateZoomKeys(now);if(live!=null)live.SendingAllowed=running&&active&&!menuCursor&&!movingWindow;
    if(!running)return;
    if(menuCursor){state.Text="Меню игры: карта скрыта, копирование на паузе.";return;}
    if(mode.SelectedIndex==0){uint seq=Native.GetClipboardSequenceNumber();if(active&&seq!=oldSequence){oldSequence=seq;try{if(Clipboard.ContainsText(TextDataFormat.UnicodeText)){Position copied;if(Position.TryParse(Clipboard.GetText(TextDataFormat.UnicodeText),out copied))Record(copied);}}catch(ExternalException){}}return;}
