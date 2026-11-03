@@ -605,7 +605,7 @@ async function handle(interaction) {
   }
   if (section==='protect') {
     if(action==='set-start') {
-      return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить время обновления',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время обновления (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
+      return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить факт нажатия',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Факт нажатия (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
     }
     if(action==='update') {
       // Any linked squad member may refresh protection or correct its actual press time.
