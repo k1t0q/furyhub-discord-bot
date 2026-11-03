@@ -318,12 +318,12 @@ async function processDiscordNotifications() {
 async function sectionProtect(interaction,m) {
   const p=await db('protect_updates',{query:'?squad_id=eq.'+m.squad_id+'&select=updated_at,effective_at,member_id&order=updated_at.desc&limit=1'});
   const last=p[0];
-  const buttons=[row(button('Обновить протект','fury:protect:update',3),...(admin(m)?[button('Изменить время обновления','fury:protect:set-start',2)]:[]))];
+  const buttons=[row(button('Обновить протект','fury:protect:update',3),button('Изменить факт нажатия','fury:protect:set-start',2))];
   if(!last)return ephem('**ПРОТЕКТ**\nПока нет обновлений.',buttons);
   const author=last.member_id?await db('members',{query:'?id=eq.'+last.member_id+'&select=nick&limit=1'}):[];
   const base=new Date(last.effective_at||last.updated_at);
   const clock=minutes=>new Date(base.getTime()+minutes*60000).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
-  return ephem('**ПРОТЕКТ**\nПоследнее обновление:\n**'+(author[0]?.nick||'Участник')+' · '+base.toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',buttons);
+  return ephem('**ПРОТЕКТ**\nПоследнее обновление (факт нажатия):\n**'+(author[0]?.nick||'Участник')+' · '+base.toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})+'**\nНачало: **'+clock(60)+'**\nСпадёт: **'+clock(540)+'**',buttons);
 }
 async function resetPanelSelection(interaction) {
   if (interaction.type !== InteractionType.MESSAGE_COMPONENT || interaction.data?.custom_id !== 'fury:menu' || !interaction.channel_id || !interaction.message?.id) return;
@@ -562,7 +562,7 @@ async function handle(interaction) {
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:protect:set-start') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
-    return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить время обновления',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время обновления (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
+    return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить факт нажатия',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Факт нажатия (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
   }
   if (interaction.type === InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id === 'fury:stock:choose') {
     if(process.env.DISCORD_TEST_MODE !== 'false')return ephem('Тестовый режим: изменение склада отключено.');
@@ -575,7 +575,7 @@ async function handle(interaction) {
   if (interaction.type === 5 && customId === 'fury:protect:set-start') {
     if (process.env.DISCORD_TEST_MODE !== 'false') return ephem('Тестовый режим: изменение данных отключено.');
     const member=await linked(interaction);
-    if (!member || !admin(member)) return ephem('Изменять время протекта может только администратор с привязанным аккаунтом.');
+    if (!member) return ephem('Для изменения времени привяжи Discord к участнику отряда.');
     const time=String(interaction.data?.components?.[0]?.components?.[0]?.value||'').trim();
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return ephem('Введите время в формате ЧЧ:ММ, например 08:45.');
     const ok=await rpc('discord_set_protect_start',{p_discord_user_id:interaction.member?.user?.id||interaction.user?.id,p_start_time:time});
@@ -605,11 +605,10 @@ async function handle(interaction) {
   }
   if (section==='protect') {
     if(action==='set-start') {
-      if(!admin(m)) return ephem('Изменять время протекта может только администратор.');
       return {type:9,data:{custom_id:'fury:protect:set-start',title:'Изменить время обновления',components:[{type:1,components:[{type:4,custom_id:'start_time',label:'Время обновления (МСК, ЧЧ:ММ)',style:1,min_length:5,max_length:5,required:true,placeholder:'08:45'}]}]}};
     }
     if(action==='update') {
-      // Any linked squad member may refresh protection; manual time edits remain admin-only.
+      // Any linked squad member may refresh protection or correct its actual press time.
       const updated=await rpc('discord_update_protect',{p_discord_user_id:interaction.member?.user?.id||interaction.user?.id});
       if(updated!==true)return ephem('Протект уже обновляли за последние 30 секунд или недостаточно прав.');
     }
