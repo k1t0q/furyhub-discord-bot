@@ -1,7 +1,7 @@
 {
   "schema": "scum-hub-static-poi/v1",
   "collected_on": "2026-11-05",
-  "status": "partial_ww2_coverage",
+  "status": "accepted_42_ww2_baseline",
   "coordinate_units": "SCUM world centimetres",
   "map_calibration": {
     "left": 619646.8573,
@@ -21,7 +21,8 @@
     "WW2 coverage: 42 locations collected; the original scum-map.com filter displayed 53. Equivalence and remaining locations are not verified.",
     "Secret bunker X/Y coordinates were published in metres and converted to centimetres, matching the site map renderer multiplication by 100. Z is unavailable and remains null.",
     "Coordinates are published POI pins, not measurements independently verified inside the game.",
-    "Embedded locally in the minimap; never uploaded as HUB squad markers."
+    "Embedded locally in the minimap; never uploaded as HUB squad markers.",
+    "User accepted the 42-point WW2 baseline on 2026-11-05; additional game coordinates can be added later."
   ],
   "markers": [
     {

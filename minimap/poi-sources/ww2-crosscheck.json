@@ -1,0 +1,362 @@
+{
+  "source_url": "https://davoonline.com/scummap/",
+  "collected_on": "2026-11-05",
+  "source_refresh_label": "Partial data refresh · 11 Oct 2026",
+  "source_payload": "EMBEDDED_GEO",
+  "zone_type": "MTZ_POI_WW2_Bunker",
+  "zone_count": 42,
+  "catalog_ww2_count": 42,
+  "unique_matches": 42,
+  "unit": "SCUM world centimetres",
+  "max_center_distance_m": 0.006,
+  "matches": [
+    {
+      "zone_center": {
+        "x": -793280,
+        "y": -649909
+      },
+      "marker_id": "poi-ww2-bunker-z0-7mhkm",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": -621277,
+        "y": -867197
+      },
+      "marker_id": "poi-ww2-bunker-z0-ed2tb",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": -320351,
+        "y": -853842
+      },
+      "marker_id": "poi-ww2-bunker-z1-7nfjd",
+      "distance_m": 0.003
+    },
+    {
+      "zone_center": {
+        "x": -389151,
+        "y": -607344
+      },
+      "marker_id": "poi-ww2-bunker-z1-bdeqf",
+      "distance_m": 0.003
+    },
+    {
+      "zone_center": {
+        "x": 236597,
+        "y": -808115
+      },
+      "marker_id": "poi-ww2-bunker-z3-c2wl7",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": 301810,
+        "y": -734149
+      },
+      "marker_id": "poi-ww2-bunker-z3-74gye",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": 66412,
+        "y": -699530
+      },
+      "marker_id": "poi-ww2-bunker-z3-2z6qi",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 473710,
+        "y": -869243
+      },
+      "marker_id": "poi-ww2-bunker-z4-7kl30",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 512943,
+        "y": -683263
+      },
+      "marker_id": "poi-ww2-bunker-z4-4igjc",
+      "distance_m": 0.003
+    },
+    {
+      "zone_center": {
+        "x": -729172,
+        "y": -494270
+      },
+      "marker_id": "poi-ww2-bunker-a0-5ckaq",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": -471168,
+        "y": -330389
+      },
+      "marker_id": "poi-ww2-bunker-a1-qgtxh",
+      "distance_m": 0.001
+    },
+    {
+      "zone_center": {
+        "x": -505693,
+        "y": -542762
+      },
+      "marker_id": "poi-ww2-bunker-a1-960j1",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": -583423,
+        "y": -502848
+      },
+      "marker_id": "poi-ww2-bunker-a1-17xi5",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": -129963,
+        "y": -560115
+      },
+      "marker_id": "poi-ww2-bunker-a2-8agt8",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": -156495,
+        "y": -456299
+      },
+      "marker_id": "poi-ww2-bunker-a2-1bbkg",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": -268215,
+        "y": -514400
+      },
+      "marker_id": "poi-ww2-bunker-a2-ttwm7",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": 223661,
+        "y": -566586
+      },
+      "marker_id": "poi-ww2-bunker-a3-4n9it",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": 139507,
+        "y": -500751
+      },
+      "marker_id": "poi-ww2-bunker-a3-amo47",
+      "distance_m": 0.003
+    },
+    {
+      "zone_center": {
+        "x": 50680,
+        "y": -552033
+      },
+      "marker_id": "poi-ww2-bunker-a3-b2zf8",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 555870,
+        "y": -311236
+      },
+      "marker_id": "poi-ww2-bunker-a4-d6za7",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 537723,
+        "y": -455144
+      },
+      "marker_id": "poi-ww2-bunker-a4-2zlhv",
+      "distance_m": 0.003
+    },
+    {
+      "zone_center": {
+        "x": 431360,
+        "y": -571828
+      },
+      "marker_id": "poi-ww2-bunker-a4-buvvy",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": -335645,
+        "y": -270850
+      },
+      "marker_id": "poi-ww2-bunker-b1-c4udv",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": -28565,
+        "y": -221034
+      },
+      "marker_id": "poi-ww2-bunker-b2-cowex",
+      "distance_m": 0.001
+    },
+    {
+      "zone_center": {
+        "x": -208183,
+        "y": -229176
+      },
+      "marker_id": "poi-ww2-bunker-b2-20s6n",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": 113328,
+        "y": -255186
+      },
+      "marker_id": "poi-ww2-bunker-b3-5i301",
+      "distance_m": 0.005
+    },
+    {
+      "zone_center": {
+        "x": 303193,
+        "y": -37139
+      },
+      "marker_id": "poi-ww2-bunker-b3-1m7wr",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 205665,
+        "y": -215408
+      },
+      "marker_id": "poi-ww2-bunker-b3-9nju9",
+      "distance_m": 0.001
+    },
+    {
+      "zone_center": {
+        "x": 589759,
+        "y": -129034
+      },
+      "marker_id": "poi-ww2-bunker-b4-7xw5y",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 355790,
+        "y": -22822
+      },
+      "marker_id": "poi-ww2-bunker-b4-9ybft",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": -861493,
+        "y": 243192
+      },
+      "marker_id": "poi-ww2-bunker-c0-bmj2w",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": -703278,
+        "y": 271057
+      },
+      "marker_id": "poi-ww2-bunker-c0-1wswy",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": -445230,
+        "y": 297444
+      },
+      "marker_id": "poi-ww2-bunker-c1-iza0t",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": -582516,
+        "y": 305989
+      },
+      "marker_id": "poi-ww2-bunker-c1-6pvz8",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": -32573,
+        "y": 71537
+      },
+      "marker_id": "poi-ww2-bunker-c2-8vzy3",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 221443,
+        "y": 263448
+      },
+      "marker_id": "poi-ww2-bunker-c3-8cno9",
+      "distance_m": 0.004
+    },
+    {
+      "zone_center": {
+        "x": 31141,
+        "y": 197968
+      },
+      "marker_id": "poi-ww2-bunker-c3-3lwap",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": 546879,
+        "y": 270608
+      },
+      "marker_id": "poi-ww2-bunker-c4-64gpu",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": 577580,
+        "y": 114940
+      },
+      "marker_id": "poi-ww2-bunker-c4-8oief",
+      "distance_m": 0.006
+    },
+    {
+      "zone_center": {
+        "x": 366349,
+        "y": 395536
+      },
+      "marker_id": "poi-ww2-bunker-d4-7xmsb",
+      "distance_m": 0.002
+    },
+    {
+      "zone_center": {
+        "x": 570905,
+        "y": 477823
+      },
+      "marker_id": "poi-ww2-bunker-d4-c2p85",
+      "distance_m": 0.001
+    },
+    {
+      "zone_center": {
+        "x": 409974,
+        "y": 604764
+      },
+      "marker_id": "poi-ww2-bunker-d4-dullq",
+      "distance_m": 0.004
+    }
+  ],
+  "legacy_source_count": 43,
+  "legacy_extra_record": {
+    "source_id": "C_2_WW2_Bunker_02",
+    "x": -233384,
+    "y": 94939
+  },
+  "notes": [
+    "All 42 bundled WW2 pins have a unique match among the 42 published MTZ WW2 zone bounding-box centres within 30 metres.",
+    "Legacy EMBEDDED_POIS list contains 43 WW2 records, including an extra C2 record without a matching updated MTZ WW2 zone. It was not added to the minimap.",
+    "This cross-check corroborates published datasets; it is not independent in-game verification or proof that all original scum-map.com 53 markers were removed or invalid.",
+    "Original scum-map.com 53-marker export remains unavailable; equivalence has not been established."
+  ]
+}
