@@ -2,7 +2,7 @@
 Source: HellBz/SCUM-Walker, src/roads.json (project README: MIT).
 No synthetic long-distance links: only merge junction gaps <= 6 metres.
 """
-import json, math, struct, collections, urllib.request, base64, hashlib
+import json, math, struct, collections, urllib.request, base64, hashlib, os
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -12,7 +12,12 @@ ROOT=Path(__file__).resolve().parent
 TARGET=ROOT if (ROOT/'PositionProbe.cs').exists() else ROOT.parent/'scum-minimap'
 source=ROOT/'source-roads.json'
 if not source.exists():
-    with urllib.request.urlopen('https://api.github.com/repos/HellBz/SCUM-Walker/git/blobs/e915011c30fc0d1d0d4cc60dda056de1671edef1',timeout=60) as response:
+    headers={'Accept':'application/vnd.github+json','User-Agent':'SCUM-HUB-minimap-build'}
+    token=os.environ.get('GITHUB_TOKEN')
+    if token:
+        headers['Authorization']='Bearer '+token
+    request=urllib.request.Request('https://api.github.com/repos/HellBz/SCUM-Walker/git/blobs/e915011c30fc0d1d0d4cc60dda056de1671edef1',headers=headers)
+    with urllib.request.urlopen(request,timeout=60) as response:
         source.write_bytes(base64.b64decode(json.load(response)['content']))
 raw=source.read_bytes()
 if hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()!='e915011c30fc0d1d0d4cc60dda056de1671edef1':
