@@ -23,6 +23,14 @@ namespace ScumPositionProbe {
   }
   public static void Run(List<string> results){
    var inbox=new AllyInbox();object owner=new object();for(int i=0;i<10000;i++)inbox.Publish(owner,new List<AllyPosition>{new AllyPosition{Nick=i.ToString()}});
+   using(HubClient reportHub=new HubClient())using(AllyLive report=new AllyLive(reportHub)){
+    var json=new System.Web.Script.Serialization.JavaScriptSerializer();
+    Check(report.HandleFlowFrame((Dictionary<string,object>)json.DeserializeObject("{\"diagnostic\":true,\"connections\":[{\"nick\":\"Friend\",\"received\":10,\"positionAge\":50,\"x\":987654,\"code\":\"SECRET\",\"client\":{\"samples\":100,\"sent\":10,\"sampleAge\":20,\"cookie\":\"SECRET_COOKIE\"}}]}")),"diagnostics are consumed before ordinary frame parser");
+    Check(!report.HandleFlowFrame((Dictionary<string,object>)json.DeserializeObject("{\"self\":\"me\",\"peers\":[{\"id\":\"friend\",\"nick\":\"Friend\",\"at\":1000}]}")),"normal frame remains available to map");
+    report.HandleFlowFrame((Dictionary<string,object>)json.DeserializeObject("{\"self\":\"me\",\"peers\":[{\"id\":\"friend\",\"nick\":\"Friend\",\"at\":1150}]}"));
+    string capture=report.DiagnosticReport();Check(capture.Contains("sourceStepMs\":150")&&capture.Contains("\"samples\":100")&&!capture.Contains("987654")&&!capture.Contains("SECRET"),"report preserves cadence, strips coordinates and credentials");
+    for(int i=0;i<300;i++)report.DiagnosticReport();Check(report.DiagnosticReport().Split(new string[]{"\r\n"},StringSplitOptions.None).Length<=242,"report stays bounded");
+   }results.Add("PASS network report cadence, diagnostic frames, bounded history and credential exclusion");
    Check(inbox.Take(owner)[0].Nick=="9999"&&inbox.Take(owner)==null,"ally frame backlog is replaced by latest");
    inbox.Publish(new object(),new List<AllyPosition>());Check(inbox.Take(owner)==null,"old connection frame discarded");results.Add("PASS latest-only ally frame coalescing under ten thousand updates");
 

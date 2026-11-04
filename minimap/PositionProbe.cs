@@ -267,6 +267,7 @@ namespace ScumPositionProbe {
    Control[] visual={mapSize,named("mapOpacity"),named("selfArrowSize"),named("allyArrowSize")};string[] names={"Размер карты, пикс.","Непрозрачность","Своя стрелка, %","Стрелки союзников, %"};for(int i=0;i<4;i++){CompactLabel(settingsPanel,names[i],0,45+i*48,280,24);MoveTo(visual[i],settingsPanel,300,40+i*48,172,29);}
    CompactLabel(settingsPanel,"ПОЛОЖЕНИЕ НА ЭКРАНЕ",0,246,472,22,true);CompactLabel(settingsPanel,"X",0,287,24,24);CompactLabel(settingsPanel,"Y",245,287,24,24);MoveTo(mapX,settingsPanel,28,280,192,29);MoveTo(mapY,settingsPanel,273,280,199,29);MoveTo(button("Сбросить положение"),settingsPanel,0,325,472,34);
    CompactLabel(settingsPanel,"ОТСЛЕЖИВАНИЕ",0,385,472,22,true);CompactLabel(settingsPanel,"Режим",0,427,180,24);MoveTo(mode,settingsPanel,210,420,262,29);CompactLabel(settingsPanel,"Копирование координат",0,474,290,25);MoveTo(keyPicker,settingsPanel,316,466,156,32);MoveTo(autoHide,settingsPanel,0,519,250,28);MoveTo(button("Настроить север · F11"),settingsPanel,258,514,214,34);
+   Button networkReport=new RoundedButton{Text="Сохранить отчёт связи"};CompactButton(networkReport);MoveTo(networkReport,settingsPanel,0,554,230,22);networkReport.Click+=delegate{if(live==null){MessageBox.Show(this,"Сначала подключись к HUB.");return;}using(SaveFileDialog save=new SaveFileDialog{FileName="SCUM_HUB_connection.txt",Filter="Текстовый отчёт|*.txt"}){if(save.ShowDialog(this)==DialogResult.OK){try{File.WriteAllText(save.FileName,live.DiagnosticReport(),new UTF8Encoding(true));MessageBox.Show(this,"Отчёт сохранён. Пришли этот файл для проверки связи.");}catch(Exception ex){MessageBox.Show(this,"Не удалось сохранить отчёт: "+ex.Message);}}}};
    MoveTo(state,this,24,735,472,32);state.Font=new Font("Segoe UI",8);CompactLabel(this,"↑↓ масштаб   F7 карта   F8 пауза   F9 стоп",24,777,472,20).Font=new Font("Segoe UI",8);
    foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){Button b=c as Button;if(b!=null)CompactButton(b,b==toggle);DarkComboBox combo=c as DarkComboBox;if(combo!=null){combo.BackColor=Color.FromArgb(21,29,35);combo.ForeColor=ForeColor;combo.FlatStyle=FlatStyle.Flat;}if(c is NumericUpDown){c.BackColor=Color.FromArgb(17,25,30);c.ForeColor=ForeColor;}}
    hubNick.BackColor=hubCode.BackColor=Color.FromArgb(17,25,30);hubNick.ForeColor=hubCode.ForeColor=ForeColor;
@@ -384,9 +385,9 @@ namespace ScumPositionProbe {
    result.Sort((a,b)=>{int order=a.MetresAway.Value.CompareTo(b.MetresAway.Value);return order!=0?order:StringComparer.CurrentCultureIgnoreCase.Compare(a.Marker.Name,b.Marker.Name);});return result;
   }
   async System.Threading.Tasks.Task RefreshSelectedStash(){
-   if(refreshingStash||hub==null)return;if(mini.Current==null){state.Text="Сначала получи позицию в игре, чтобы найти схроны на миникарте.";return;}
+   if(refreshingStash||hub==null)return;if(mini.Current==null){ShowActionNotice("Сначала получи позицию в игре, чтобы найти схроны на миникарте.");return;}
    List<NavigationChoice> choices=VisibleStashes(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height);
-   if(choices.Count==0){state.Text="В видимой области миникарты нет схронов с таймером. Увеличь обзор или подойди ближе.";return;}
+   if(choices.Count==0){ShowActionNotice("В видимой области миникарты нет схронов с таймером. Увеличь обзор или подойди ближе.");return;}
    HubClient current=hub;int generation=hubGeneration;HubMarker marker=null;refreshingStash=true;UpdateNavigationState();
    try{
     using(Form dialog=new Form()){
@@ -397,9 +398,9 @@ namespace ScumPositionProbe {
      if(dialog.ShowDialog(this)!=DialogResult.OK)return;NavigationChoice selected=list.SelectedItem as NavigationChoice;if(selected==null)return;marker=selected.Marker;
     }
     if(IsDisposed||hub!=current||generation!=hubGeneration)return;stashRefresh.Text="Обновляю…";
-    await current.RefreshStash(marker);if(IsDisposed||hub!=current||generation!=hubGeneration)return;await RefreshHub();if(!IsDisposed)state.Text="Схрон «"+marker.Name+"» обновлён на 14 дней.";
+    await current.RefreshStash(marker);if(IsDisposed||hub!=current||generation!=hubGeneration)return;await RefreshHub();if(!IsDisposed)ShowActionNotice("Схрон «"+marker.Name+"» обновлён на 14 дней.");
    }
-   catch(Exception ex){if(!IsDisposed&&hub==current&&generation==hubGeneration)state.Text=ex.Message;}
+   catch(Exception ex){if(!IsDisposed&&hub==current&&generation==hubGeneration)ShowActionNotice(ex.Message);}
    finally{refreshingStash=false;if(!IsDisposed){stashRefresh.Text="Обновить схрон · 14 дней";UpdateNavigationState();}}
   }
   void UpdateNavigationState(){navigationGoal.Enabled=navigationGoal.Items.Count>0;((DarkComboBox)navigationGoal).EmptyText=hub==null?"Подключись к HUB, чтобы выбрать метку":"Нет доступных меток";navigationGoal.Invalidate();navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
@@ -489,7 +490,10 @@ namespace ScumPositionProbe {
   void ReleaseKeys(){List<Native.INPUT> keys=new List<Native.INPUT>();if(keyOwned)keys.Add(Native.Key(ownedKey,true));if(ctrlOwned)keys.Add(Native.Key(0x11,true));if(keys.Count>0)Native.Send(keys.ToArray());keyOwned=ctrlOwned=false;}
   readonly ZoomKeys zoomKeys=new ZoomKeys();
   void UpdateZoomKeys(long now){uint pid;IntPtr window;bool allowed=!movingWindow&&mapWanted&&mini.Visible&&IsGame(out pid,out window)&&!Native.CursorVisible()&&!Native.Down(0x10)&&!Native.Down(0x11)&&!Native.Down(0x12);int direction=zoomKeys.Update(allowed,Native.Down(0x26),Native.Down(0x28),now);if(direction!=0)mini.ChangeZoom(direction>0);}
-  void Tick(){
+  string actionNotice;long actionNoticeUntil;
+  void ShowActionNotice(string message){actionNotice=message;actionNoticeUntil=clock.ElapsedMilliseconds+8000;state.Text=message;}
+  void Tick(){try{TickCore();}finally{if(actionNotice!=null&&clock.ElapsedMilliseconds<actionNoticeUntil&&!IsDisposed)state.Text=actionNotice;else actionNotice=null;}}
+  void TickCore(){
    var newestAllies=allyInbox.Take(live);if(newestAllies!=null&&!mini.IsDisposed){mini.Allies=newestAllies;mini.Invalidate();}
    long now=clock.ElapsedMilliseconds;uint pid;IntPtr window;if(now>=nextFocus){cachedActive=IsGame(out cachedPid,out cachedWindow);nextFocus=now+150;}pid=cachedPid;window=cachedWindow;bool active=cachedActive;if(!movingWindow&&now>=nextUi){nextUi=now+250;foregroundLabel.Text=active?"SCUM активно · PID "+pid:"SCUM не в фокусе — команды не отправляются";
    metrics.Text="Попытки: "+attempts+"   Получено: "+successes+"   Изменений: "+changes+"   Нет ответа: "+timeouts+"\r\nПоследние координаты: "+(lastSuccess<0?"ещё не получены":((now-lastSuccess)/1000.0).ToString("0.0")+" с назад")+"   Пропуски ввода: "+blocked;
@@ -575,4 +579,3 @@ namespace ScumPositionProbe {
   }
  }
 }
-

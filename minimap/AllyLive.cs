@@ -19,6 +19,29 @@ namespace ScumPositionProbe {
   public volatile bool Sharing=true;public volatile bool SendingAllowed;public Action<List<AllyPosition>> Updated;public Action<string> Status;
   readonly object gate=new object();string lastPacket;long revision,sentRevision;Position previousSample;double? previousHeading;
   public AllyLive(HubClient hub){this.hub=hub;this.cookies=hub.Cookies;}
+  readonly object reportGate=new object();readonly Queue<string> reports=new Queue<string>();
+  readonly Dictionary<string,Dictionary<string,object>> peerFlow=new Dictionary<string,Dictionary<string,object>>();
+  long diagnosticAsked,lastFrameTick,maxFrameGap,positionSent;
+  void AddReport(string kind,object server){
+   long now=MonotonicMs();var data=new Dictionary<string,object>{{"build","flow-1"},{"time",DateTime.UtcNow.ToString("o")},{"kind",kind},{"samples",Interlocked.Read(ref sampleCount)},{"positionsSent",Interlocked.Read(ref positionSent)},{"frames",Interlocked.Read(ref receivedCount)},{"reconnects",Interlocked.Read(ref reconnectCount)},{"sampleAgeMs",Interlocked.Read(ref lastSampleTick)==0?-1:now-Interlocked.Read(ref lastSampleTick)},{"frameAgeMs",Interlocked.Read(ref lastReceivedTick)==0?-1:now-Interlocked.Read(ref lastReceivedTick)},{"maxFrameGapMs",Interlocked.Read(ref maxFrameGap)},{"sharing",Sharing},{"sendingAllowed",SendingAllowed},{"failure",lastFailure}};
+   if(server!=null)data["server"]=server;
+   lock(reportGate){data["peers"]=new List<Dictionary<string,object>>(peerFlow.Values);reports.Enqueue(new JavaScriptSerializer().Serialize(data));while(reports.Count>240)reports.Dequeue();}
+  }
+  public string DiagnosticReport(){AddReport("export",null);lock(reportGate)return "SCUM HUB network report flow-1\r\nNo coordinates, account codes or session cookies are included.\r\n"+String.Join("\r\n",reports.ToArray());}
+  internal bool HandleFlowFrame(Dictionary<string,object> root){
+   long now=MonotonicMs();object raw;
+   if(root.TryGetValue("diagnostic",out raw)&&raw is bool&&(bool)raw){
+    var safe=new List<Dictionary<string,object>>();object connections;
+    if(root.TryGetValue("connections",out connections)&&connections is object[])foreach(object row in (object[])connections){var original=row as Dictionary<string,object>;if(original==null)continue;var clean=new Dictionary<string,object>();foreach(string key in new string[]{"nick","active","received","rejected","lastPacketAge","positionAge","reason"})if(original.TryGetValue(key,out raw))clean[key]=raw;
+     object client;if(original.TryGetValue("client",out client)&&client is Dictionary<string,object>){var counters=new Dictionary<string,object>();foreach(string key in new string[]{"samples","sent","received","reconnects","sampleAge","replyAge","sending","failure"})if(((Dictionary<string,object>)client).TryGetValue(key,out raw))counters[key]=raw;clean["client"]=counters;}safe.Add(clean);}
+    AddReport("server",new Dictionary<string,object>{{"roundTripMs",diagnosticAsked==0?-1:now-diagnosticAsked},{"connections",safe}});return true;
+   }
+   object rows;if(root.TryGetValue("peers",out rows)&&rows is object[])lock(reportGate)foreach(object row in (object[])rows){var p=row as Dictionary<string,object>;if(p==null||!p.ContainsKey("id")||!p.ContainsKey("at"))continue;string id=Convert.ToString(p["id"]);if(root.ContainsKey("self")&&id==Convert.ToString(root["self"]))continue;long at=Convert.ToInt64(p["at"]);Dictionary<string,object> old;if(peerFlow.TryGetValue(id,out old)&&Convert.ToInt64(old["sourceAt"])==at)continue;
+    peerFlow[id]=new Dictionary<string,object>{{"nick",p.ContainsKey("nick")?p["nick"]:""},{"updates",old==null?1:Convert.ToInt64(old["updates"])+1},{"sourceStepMs",old==null?0:at-Convert.ToInt64(old["sourceAt"])},{"arrivalStepMs",old==null?0:now-Convert.ToInt64(old["arrivalAt"])},{"sourceAt",at},{"arrivalAt",now}};
+    if(peerFlow.Count>50)peerFlow.Clear();
+   }
+   return false;
+  }
   internal Func<DateTime> UtcNow=()=>DateTime.UtcNow;
   public static bool Visible(DateTime observed,DateTime now){return (now-observed).TotalSeconds<=30;}
   public static bool Stale(DateTime observed,DateTime now){return (now-observed).TotalSeconds>7;}
@@ -39,7 +62,7 @@ namespace ScumPositionProbe {
     Interlocked.Increment(ref reconnectCount);nextDiagnostic=0;socket=ws;ws.Options.Cookies=cookies;ws.Options.SetRequestHeader("Origin","https://scum-hub.ru");
     using(var connect=CancellationTokenSource.CreateLinkedTokenSource(cancel.Token)){connect.CancelAfter(10000);await ws.ConnectAsync(new Uri("wss://scum-hub.ru/api/minimap/live"),connect.Token);}
     Report("Союзники: проверяю связь…");connectionConfirmed=false;Interlocked.Exchange(ref lastReceivedTick,MonotonicMs());
-    receive=Receive(ws);bool wasSharing=true;long renew=MonotonicMs()+240000,lastSent=MonotonicMs();
+    receive=Receive(ws);bool wasSharing=true;long renew=MonotonicMs()+240000,lastSent=MonotonicMs(),nextFlow=MonotonicMs()+1000;
     while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested&&MonotonicMs()<renew){
      if(receive.IsCompleted){await receive;break;}
      if(MonotonicMs()-Interlocked.Read(ref lastReceivedTick)>=SilenceMs)throw new TimeoutException("Ally server stopped responding");
@@ -47,17 +70,20 @@ namespace ScumPositionProbe {
      if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&revision!=sentRevision&&(DateTime.UtcNow-observed).TotalMilliseconds<300){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}
      wasSharing=Sharing;
      if(packet==null&&MonotonicMs()-lastSent>=HeartbeatMs)packet="{\"ping\":true}";
-     if(packet!=null){await Send(ws,packet);lastSent=MonotonicMs();if(sendingRevision>0){lock(gate){sentRevision=sendingRevision;}}}
+     if(packet!=null){await Send(ws,packet);lastSent=MonotonicMs();if(sendingRevision>0){Interlocked.Increment(ref positionSent);lock(gate){sentRevision=sendingRevision;}}}
+     if(MonotonicMs()>=nextFlow){nextFlow=MonotonicMs()+5000;diagnosticAsked=MonotonicMs();AddReport("request",null);await Send(ws,"{\"diagnostic\":true}");}
      await Task.Delay(150,cancel.Token);
     }
     ws.Abort();
    }}catch(HubExpiredException){if(!cancel.IsCancellationRequested)Report("Сессия HUB завершена. Войди снова; метки сохранены.");break;}
-   catch(Exception ex){lastFailure=ex.GetType().Name+": "+ex.Message;if(lastFailure.Length>80)lastFailure=lastFailure.Substring(0,80);if(!cancel.IsCancellationRequested)Report("Союзники: связь потеряна · переподключаюсь…");}
+   catch(Exception ex){lastFailure=ex.GetType().Name+": "+ex.Message;if(lastFailure.Length>80)lastFailure=lastFailure.Substring(0,80);AddReport("failure",null);if(!cancel.IsCancellationRequested)Report("Союзники: связь потеряна · переподключаюсь…");}
    finally{if(ws!=null){ws.Abort();ws.Dispose();}if(receive!=null){try{await receive;}catch{}}socket=null;}
    try{await Task.Delay(2000,cancel.Token);}catch{break;}
   }}
   async Task Receive(ClientWebSocket ws){byte[] bytes=new byte[65536];while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested){int length=0;WebSocketReceiveResult part;do{part=await ws.ReceiveAsync(new ArraySegment<byte>(bytes,length,bytes.Length-length),cancel.Token);if(part.MessageType==WebSocketMessageType.Close)throw new WebSocketException("Remote close "+part.CloseStatus+": "+part.CloseStatusDescription);length+=part.Count;if(length==bytes.Length&&!part.EndOfMessage)throw new Exception("Packet too large");}while(!part.EndOfMessage);
-   List<AllyPosition> peers=ParsePeers(Encoding.UTF8.GetString(bytes,0,length),DateTime.UtcNow);Interlocked.Increment(ref receivedCount);Interlocked.Exchange(ref lastReceivedTick,MonotonicMs());if(!connectionConfirmed){connectionConfirmed=true;Report("Союзники: связь подтверждена · 150 мс");}if(Updated!=null)Updated(peers);
+   string payload=Encoding.UTF8.GetString(bytes,0,length);long tick=MonotonicMs();Interlocked.Exchange(ref lastReceivedTick,tick);var root=new JavaScriptSerializer().DeserializeObject(payload) as Dictionary<string,object>;if(HandleFlowFrame(root))continue;
+   long previous=Interlocked.Exchange(ref lastFrameTick,tick);if(previous>0){long gap=tick-previous;if(gap>Interlocked.Read(ref maxFrameGap))Interlocked.Exchange(ref maxFrameGap,gap);}
+   List<AllyPosition> peers=ParsePeers(payload,DateTime.UtcNow);Interlocked.Increment(ref receivedCount);if(!connectionConfirmed){connectionConfirmed=true;Report("Союзники: связь подтверждена · отчёт в настройках");}if(Updated!=null)Updated(peers);
   }}
   public static List<AllyPosition> ParsePeers(string payload,DateTime clientNow){
    var root=(Dictionary<string,object>)new JavaScriptSerializer().DeserializeObject(payload);string self=Convert.ToString(root["self"]);double now=Convert.ToDouble(root["now"]);List<AllyPosition> peers=new List<AllyPosition>();foreach(object raw in (object[])root["peers"]){var d=raw as Dictionary<string,object>;if(d==null||Convert.ToString(d["id"])==self)continue;double x=Convert.ToDouble(d["x"]),y=Convert.ToDouble(d["y"]);if(Double.IsNaN(x)||Double.IsNaN(y)||Math.Abs(x)>2000000||Math.Abs(y)>2000000)continue;string nick=Convert.ToString(d["nick"]);peers.Add(new AllyPosition{Id=Convert.ToString(d["id"]),Nick=nick.Length>32?nick.Substring(0,32):nick,X=x,Y=y,HasHeading=d["heading"]!=null,Heading=d["heading"]==null?0:Convert.ToDouble(d["heading"]),Observed=clientNow.AddMilliseconds(-Math.Max(0,Math.Min(86400000,now-Convert.ToDouble(d["at"]))))});}return peers;
@@ -65,4 +91,3 @@ namespace ScumPositionProbe {
   public void Dispose(){cancel.Cancel();if(socket!=null)socket.Abort();}
  }
 }
-

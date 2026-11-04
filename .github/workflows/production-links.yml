@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: latest-only ally frames, send before painting and client latency diagnostics
+# Approved release: measured ally flow report and persistent eight-second stash feedback
 on:
   push:
     branches: [scum-hub-migration]
