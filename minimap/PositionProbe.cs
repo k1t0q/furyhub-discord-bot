@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -207,7 +207,7 @@ namespace ScumPositionProbe {
    catch(Exception){if(!IsDisposed&&version==hubGeneration){mini.SyncStatus="HUB: нет связи · метки устарели";hubState.Text="Нет связи с HUB. Нажми «Обновить метки», чтобы повторить.";}}
    finally{syncing=false;if(!IsDisposed){refreshMarkers.Enabled=hub!=null;refreshMarkers.Text="Обновить метки";}}
   }
-  void DisconnectHub(){mini.Navigation.Cancel("Маршрут отменён: HUB отключён.");refreshMarkers.Enabled=false;if(live!=null){live.Dispose();live=null;}mini.Allies=new List<AllyPosition>();hubGeneration++;if(hub!=null){hub.Dispose();hub=null;}mini.Markers=new List<HubMarker>();UpdateNavigationMarkers();mini.SyncEnabled=false;mini.SyncStatus="HUB не подключён";hubCode.Clear();hubState.Text="Отключено. Метки удалены из миникарты.";UpdateConnectionLayout();}
+  void DisconnectHub(){if(mini.Navigation.GoalId!=null&&!mini.Navigation.GoalId.StartsWith("poi-",StringComparison.Ordinal))mini.Navigation.Cancel("Маршрут отменён: HUB отключён.");refreshMarkers.Enabled=false;if(live!=null){live.Dispose();live=null;}mini.Allies=new List<AllyPosition>();hubGeneration++;if(hub!=null){hub.Dispose();hub=null;}mini.Markers=new List<HubMarker>();UpdateNavigationMarkers();mini.SyncEnabled=false;mini.SyncStatus="HUB не подключён";hubCode.Clear();hubState.Text="HUB отключён. Объекты SCUM доступны.";UpdateConnectionLayout();}
 
   readonly Timer timer=new Timer();readonly Stopwatch clock=Stopwatch.StartNew();
   readonly Label state=new Label(),positionLabel=new Label(),metrics=new Label(),foregroundLabel=new Label();
@@ -268,12 +268,22 @@ namespace ScumPositionProbe {
    CompactLabel(settingsPanel,"ПОЛОЖЕНИЕ НА ЭКРАНЕ",0,246,472,22,true);CompactLabel(settingsPanel,"X",0,287,24,24);CompactLabel(settingsPanel,"Y",245,287,24,24);MoveTo(mapX,settingsPanel,28,280,192,29);MoveTo(mapY,settingsPanel,273,280,199,29);MoveTo(button("Сбросить положение"),settingsPanel,0,325,472,34);
    CompactLabel(settingsPanel,"ОТСЛЕЖИВАНИЕ",0,385,472,22,true);CompactLabel(settingsPanel,"Режим",0,427,180,24);MoveTo(mode,settingsPanel,210,420,262,29);CompactLabel(settingsPanel,"Копирование координат",0,474,290,25);MoveTo(keyPicker,settingsPanel,316,466,156,32);MoveTo(autoHide,settingsPanel,0,519,250,28);MoveTo(button("Настроить север · F11"),settingsPanel,258,514,214,34);
    Button networkReport=new RoundedButton{Text="Сохранить отчёт связи"};CompactButton(networkReport);MoveTo(networkReport,settingsPanel,0,554,230,22);networkReport.Click+=delegate{if(live==null){MessageBox.Show(this,"Сначала подключись к HUB.");return;}using(SaveFileDialog save=new SaveFileDialog{FileName="SCUM_HUB_connection.txt",Filter="Текстовый отчёт|*.txt"}){if(save.ShowDialog(this)==DialogResult.OK){try{File.WriteAllText(save.FileName,live.DiagnosticReport(),new UTF8Encoding(true));MessageBox.Show(this,"Отчёт сохранён. Пришли этот файл для проверки связи.");}catch(Exception ex){MessageBox.Show(this,"Не удалось сохранить отчёт: "+ex.Message);}}}};
+   Button poiSettings=new RoundedButton{Text="Объекты SCUM"};CompactButton(poiSettings);MoveTo(poiSettings,settingsPanel,242,554,230,22);poiSettings.Click+=delegate{ShowPoiSettings();};
    MoveTo(state,this,24,735,472,32);state.Font=new Font("Segoe UI",8);CompactLabel(this,"↑↓ масштаб   F7 карта   F8 пауза   F9 стоп",24,777,472,20).Font=new Font("Segoe UI",8);
    foreach(Control panel in new Control[]{homePanel,settingsPanel})foreach(Control c in panel.Controls){Button b=c as Button;if(b!=null)CompactButton(b,b==toggle);DarkComboBox combo=c as DarkComboBox;if(combo!=null){combo.BackColor=Color.FromArgb(21,29,35);combo.ForeColor=ForeColor;combo.FlatStyle=FlatStyle.Flat;}if(c is NumericUpDown){c.BackColor=Color.FromArgb(17,25,30);c.ForeColor=ForeColor;}}
    hubNick.BackColor=hubCode.BackColor=Color.FromArgb(17,25,30);hubNick.ForeColor=hubCode.ForeColor=ForeColor;
    foreach(Control parent in new Control[]{homePanel,settingsPanel,loginPanel}){List<Control> fields=new List<Control>();foreach(Control c in parent.Controls)if(c is TextBox||c is NumericUpDown)fields.Add(c);foreach(Control c in fields){Rectangle bounds=c.Bounds;RoundedFieldFrame frame=new RoundedFieldFrame(c);parent.Controls.Add(frame);frame.Bounds=bounds;frame.PerformLayout();}}
    RoundedUi.Clip(connectedPanel,10);connectedPanel.SizeChanged+=delegate{RoundedUi.Clip(connectedPanel,10);};
    SelectCompactTab(false);UpdateConnectionLayout();
+  }
+  void ShowPoiSettings(){using(Form dialog=CreatePoiSettings())dialog.ShowDialog(this);}
+  Form CreatePoiSettings(){
+   Form dialog=new Form();
+    dialog.HandleCreated+=delegate{RoundedUi.DarkTitle(dialog);};dialog.Text="Объекты SCUM";dialog.ClientSize=new Size(380,305);dialog.FormBorderStyle=FormBorderStyle.FixedDialog;dialog.MaximizeBox=dialog.MinimizeBox=false;dialog.StartPosition=FormStartPosition.CenterParent;dialog.BackColor=BackColor;dialog.ForeColor=ForeColor;dialog.Font=new Font("Segoe UI",9);
+    Label heading=new Label{Text="Показывать на миникарте",Location=new Point(18,15),Size=new Size(344,24)};dialog.Controls.Add(heading);
+    for(int i=0;i<StaticPoiLayer.Categories.Length;i++){string key=StaticPoiLayer.Categories[i];CheckBox box=new CheckBox{Text=StaticPoiLayer.Labels[i]+" · "+mini.Objects.Count(key)+(key=="ww2_bunker"?" (список неполный)":""),Checked=mini.Objects.IsEnabled(key),AutoSize=false,Location=new Point(18,47+i*34),Size=new Size(344,28)};box.CheckedChanged+=delegate{mini.Objects.SetEnabled(key,box.Checked);UpdateNavigationMarkers();mini.Invalidate();};dialog.Controls.Add(box);}
+    Label note=new Label{Text="Постоянные объекты хранятся в программе.\r\nWW2: пока 42 из 53 точек исходной карты.",Location=new Point(18,221),Size=new Size(344,38)};note.ForeColor=Color.FromArgb(150,166,176);dialog.Controls.Add(note);
+    Button close=new RoundedButton{Text="Готово",DialogResult=DialogResult.OK,Location=new Point(232,266),Size=new Size(130,30)};StyleButton(close);dialog.Controls.Add(close);dialog.AcceptButton=close;dialog.CancelButton=close;return dialog;
   }
   void SaveUiPreview(string name,DarkComboBox open=null){if(Environment.OSVersion.Platform!=PlatformID.Win32NT)return;using(Bitmap image=new Bitmap(Width,Height)){DrawToBitmap(image,new Rectangle(0,0,Width,Height));if(open!=null)open.RenderOpenPopup(image);image.Save(name,System.Drawing.Imaging.ImageFormat.Png);}}
   static void PumpUi(int milliseconds){Stopwatch wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<milliseconds){Application.DoEvents();System.Threading.Thread.Sleep(1);}}
@@ -291,7 +301,7 @@ namespace ScumPositionProbe {
    if(navigationGoal.Width!=472||navigationMode.Width!=194||mode.Width!=262)throw new Exception("Selector width was lost during layout");
    if(TextRenderer.MeasureText("На машине",navigationMode.Font).Width>navigationMode.Width-38||TextRenderer.MeasureText("Автоматически",mode.Font).Width>mode.Width-38)throw new Exception("Mode text does not fit");
    if(connectedPanel.BackColor!=BackColor)throw new Exception("Connection background must match the form");
-   if(navigationGoal.Enabled||navigationGoal.DroppedDown)throw new Exception("Empty destination selector must be disabled");
+   if(!navigationGoal.Enabled||navigationGoal.DroppedDown)throw new Exception("Built-in destinations must be available offline");
    Rectangle loginBounds=homePanel.RectangleToClient(hubLogin.RectangleToScreen(hubLogin.ClientRectangle));if(hubState.Bounds.IntersectsWith(loginBounds)||!hubLogin.Visible||loginPanel.GetChildAtPoint(new Point(hubLogin.Left+hubLogin.Width/2,hubLogin.Top+hubLogin.Height/2))!=hubLogin)throw new Exception("Login button is covered");
    SaveUiPreview("ui-preview-login.png");
    if(Environment.OSVersion.Platform==PlatformID.Win32NT){Activate();PumpUi(80);for(int click=0;click<4;click++){TestMouseClick(navigationMode);if(navigationMode.DroppedDown!=(click%2==0))throw new Exception("Repeated selector click did not toggle: "+click);}Console.WriteLine("PASS real mouse repeated dropdown toggle");}
@@ -299,6 +309,14 @@ namespace ScumPositionProbe {
    foreach(DarkComboBox combo in new DarkComboBox[]{mode,(DarkComboBox)settingsPanel.Controls.Find("mapOpacity",true)[0]}){if(!(combo is DarkComboBox)||combo.DropDownWidth!=combo.Width||combo.DropDownHeight>240)throw new Exception("Selector style/geometry incorrect");combo.DroppedDown=true;Application.DoEvents();if(!combo.DroppedDown)throw new Exception("Selector did not open");combo.DroppedDown=false;using(Bitmap image=new Bitmap(combo.Width,combo.Height)){combo.DrawToBitmap(image,combo.ClientRectangle);Color pixel=image.GetPixel(combo.Width-3,combo.Height/2);if(pixel.R>190&&pixel.G>190&&pixel.B>190)throw new Exception("White native selector chrome leaked");}}
    if(homePanel.Visible||!settingsPanel.Visible||!mapSize.Visible||navigationGoal.Visible)throw new Exception("Settings tab visibility incorrect");
    SaveUiPreview("ui-preview-settings.png");
+   using(Form objectsDialog=CreatePoiSettings()){
+    objectsDialog.Show(this);Application.DoEvents();int categories=0;
+    foreach(Control control in objectsDialog.Controls){if(control.Right>objectsDialog.ClientSize.Width||control.Bottom>objectsDialog.ClientSize.Height)throw new Exception("Clipped POI control: "+control.Text);CheckBox box=control as CheckBox;if(box!=null){categories++;bool before=box.Checked;box.Checked=!before;Application.DoEvents();box.Checked=before;}}
+    if(categories!=5)throw new Exception("POI visibility categories missing");
+    if(Environment.OSVersion.Platform==PlatformID.Win32NT)using(Bitmap image=new Bitmap(objectsDialog.Width,objectsDialog.Height)){objectsDialog.DrawToBitmap(image,new Rectangle(0,0,image.Width,image.Height));image.Save("ui-preview-objects.png",System.Drawing.Imaging.ImageFormat.Png);}
+    objectsDialog.Close();Console.WriteLine("PASS POI settings layout and five live filters");
+   }
+
    foreach(Control input in new Control[]{mapSize,mapX,mapY,settingsPanel.Controls.Find("selfArrowSize",true)[0],settingsPanel.Controls.Find("allyArrowSize",true)[0]}){RoundedFieldFrame frame=(RoundedFieldFrame)input.Parent;using(Bitmap image=new Bitmap(frame.Width,frame.Height)){frame.DrawToBitmap(image,frame.ClientRectangle);Color pixel=image.GetPixel(frame.Width-15,frame.Height/2);if(pixel.R>190&&pixel.G>190&&pixel.B>190)throw new Exception("White numeric button leaked");}}
    hubNick.Text="k1t0";hubState.Text="Союзники: подключено · 150 мс";hub=new HubClient();UpdateConnectionLayout();homeTab.PerformClick();Application.DoEvents();if(loginPanel.Visible||!connectedPanel.Visible||hubCode.Visible||!hubState.Visible)throw new Exception("Connected login collapse incorrect");
    for(int i=0;i<30;i++)mini.Markers.Add(new HubMarker{Id="ui-test-"+i,Name=i==0?"Схрон на депо, пока почти пустой":"Схрон с припасами "+(i+1).ToString("00"),Kind="stash",X=.5,Y=.5});RebuildNavigationChoices();SaveUiPreview("ui-preview-home.png");navigationGoal.DroppedDown=true;Application.DoEvents();if(!navigationGoal.Enabled||!navigationGoal.DroppedDown||navigationGoal.DropDownWidth!=navigationGoal.Width||navigationGoal.DropDownHeight>240)throw new Exception("Destination popup geometry/state incorrect");SaveUiPreview("ui-preview-list.png",navigationGoal);navigationGoal.TestScrollInput();navigationGoal.DroppedDown=false;mini.Markers.Clear();RebuildNavigationChoices();
@@ -338,14 +356,14 @@ namespace ScumPositionProbe {
   readonly DarkComboBox navigationMode=new DarkComboBox();readonly DarkComboBox navigationGoal=new DarkComboBox();readonly Button navigationStart=new RoundedButton(),navigationCancel=new RoundedButton(),stashRefresh=new RoundedButton();bool refreshingStash;readonly Label navigationState=new Label();
   internal sealed class NavigationChoice {public HubMarker Marker;public string Header;public double? MetresAway;public override string ToString(){return Marker==null?Header:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y)+(MetresAway.HasValue?" · "+RoadGeometry.Metres(MetresAway.Value):"");}}
   bool navigationListUpdating;int lastNavigationIndex=-1;
-  static int NavigationGroup(HubMarker marker){return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
+  static int NavigationGroup(HubMarker marker){if(StaticPoiLayer.IsStatic(marker)){int index=Array.IndexOf(StaticPoiLayer.Categories,marker.Kind.Substring(4));return index<0?2:index+3;}return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
   internal static List<NavigationChoice> GroupNavigationMarkers(List<HubMarker> markers,Position current,double radius,int width,int height){
-   string[] names={"СХРОНЫ","БАЗЫ","ДРУГОЕ"};List<NavigationChoice> rows=new List<NavigationChoice>();
+   string[] names={"СХРОНЫ","БАЗЫ","ДРУГОЕ","ПОЛИЦАЙКИ","БРЕНОРЫ","СЕКРЕТКИ","TEC1","WW2"};List<NavigationChoice> rows=new List<NavigationChoice>();
    if(current!=null){PointF here=RoadGeometry.FromPosition(current);List<HubMarker> visible=markers.FindAll(m=>MapMath.MarkerInView(m,current,radius,width,height));
     visible.Sort((a,b)=>{int order=RoadGeometry.Distance(here,new PointF((float)a.X,(float)a.Y)).CompareTo(RoadGeometry.Distance(here,new PointF((float)b.X,(float)b.Y)));return order!=0?order:StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);});
     if(visible.Count>0){rows.Add(new NavigationChoice{Header="НА МИНИКАРТЕ"});foreach(HubMarker marker in visible)rows.Add(new NavigationChoice{Marker=marker,MetresAway=RoadGeometry.Distance(here,new PointF((float)marker.X,(float)marker.Y))});}
    }
-   for(int group=0;group<3;group++){List<HubMarker> sorted=markers.FindAll(m=>NavigationGroup(m)==group);if(sorted.Count==0)continue;sorted.Sort((a,b)=>{int n=StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);return n!=0?n:StringComparer.Ordinal.Compare(a.Id,b.Id);});rows.Add(new NavigationChoice{Header=names[group]});foreach(HubMarker marker in sorted)rows.Add(new NavigationChoice{Marker=marker});}
+   for(int group=0;group<8;group++){List<HubMarker> sorted=markers.FindAll(m=>NavigationGroup(m)==group);if(sorted.Count==0)continue;sorted.Sort((a,b)=>{int n=StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);return n!=0?n:StringComparer.Ordinal.Compare(a.Id,b.Id);});rows.Add(new NavigationChoice{Header=names[group]});foreach(HubMarker marker in sorted)rows.Add(new NavigationChoice{Marker=marker});}
    return rows;
   }
   void NavigationSelectionChanged(){
@@ -366,7 +384,7 @@ namespace ScumPositionProbe {
    ClientSize=new Size(700,720);MinimumSize=MaximumSize=new Size(716,759);state.Top=674;
    MakeLabel("НАВИГАТОР",24,549,145,22,10,true);
    navigationMode.SetBounds(172,546,163,25);navigationMode.DropDownStyle=ComboBoxStyle.DropDownList;navigationMode.Items.AddRange(new object[]{"На машине","Пешком"});navigationMode.SelectedIndex=0;Controls.Add(navigationMode);
-   navigationMode.SelectedIndexChanged+=async delegate{mini.Navigation.Mode=navigationMode.SelectedIndex==1?TravelMode.Foot:TravelMode.Car;string id=mini.Navigation.GoalId;HubMarker goal=mini.Markers.Find(m=>m.Id==id);if(goal!=null&&mini.Current!=null)await mini.Navigation.Plan(mini.Current,goal);};
+   navigationMode.SelectedIndexChanged+=async delegate{mini.Navigation.Mode=navigationMode.SelectedIndex==1?TravelMode.Foot:TravelMode.Car;string id=mini.Navigation.GoalId;HubMarker goal=mini.FindMarker(id);if(goal!=null&&mini.Current!=null)await mini.Navigation.Plan(mini.Current,goal);};
    navigationGoal.SetBounds(24,575,311,30);navigationGoal.DropDownStyle=ComboBoxStyle.DropDownList;navigationGoal.BackColor=Color.FromArgb(34,46,52);navigationGoal.ForeColor=ForeColor;navigationGoal.DrawMode=DrawMode.OwnerDrawFixed;navigationGoal.ItemHeight=23;navigationGoal.IsSelectable=item=>((NavigationChoice)item).Marker!=null;navigationGoal.DrawItem+=DrawNavigationChoice;navigationGoal.SelectedIndexChanged+=delegate{NavigationSelectionChanged();};Controls.Add(navigationGoal);
    navigationGoal.DropDown+=delegate{RebuildNavigationChoices();if(!navigationGoal.Enabled){navigationGoal.DroppedDown=false;return;}};
    mini.ZoomChanged+=delegate{if(!navigationGoal.DroppedDown)RebuildNavigationChoices();};
@@ -377,7 +395,7 @@ namespace ScumPositionProbe {
    navigationCancel.Click+=delegate{mini.Navigation.Cancel("Маршрут отменён.");};
    stashRefresh.Text="Обновить схрон · 14 дней";stashRefresh.SetBounds(385,658,280,30);StyleButton(stashRefresh);Controls.Add(stashRefresh);stashRefresh.Click+=async delegate{await RefreshSelectedStash();};
    mini.Navigation.Changed+=delegate{if(!IsDisposed){UpdateNavigationState();mini.Invalidate();}};
-   UpdateNavigationState();
+   RebuildNavigationChoices();
   }
   internal static List<NavigationChoice> VisibleStashes(List<HubMarker> markers,Position current,double radius,int width,int height){
    List<NavigationChoice> result=new List<NavigationChoice>();if(current==null)return result;PointF origin=RoadGeometry.FromPosition(current);
@@ -406,14 +424,14 @@ namespace ScumPositionProbe {
   void UpdateNavigationState(){navigationGoal.Enabled=navigationGoal.Items.Count>0;((DarkComboBox)navigationGoal).EmptyText=hub==null?"Подключись к HUB, чтобы выбрать метку":"Нет доступных меток";navigationGoal.Invalidate();navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
   void RebuildNavigationChoices(){
    NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
-   navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.Markers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
+   navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.NavigationMarkers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
     if(navigationGoal.SelectedIndex<0&&first>=0)navigationGoal.SelectedIndex=first;lastNavigationIndex=navigationGoal.SelectedIndex;
    }finally{navigationGoal.EndUpdate();navigationListUpdating=false;}
    UpdateNavigationState();
   }
   void UpdateNavigationMarkers(){
    RebuildNavigationChoices();
-   string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.Markers.Find(m=>m.Id==activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
+   string activeId=mini.Navigation.GoalId;if(activeId!=null){HubMarker active=mini.FindMarker(activeId);if(active==null)mini.Navigation.Cancel("Метка удалена из HUB. Маршрут отменён.");else mini.Navigation.RefreshTarget(active,mini.Current);}
    UpdateNavigationState();
   }
   bool creatingMarker;

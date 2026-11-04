@@ -24,6 +24,10 @@ namespace ScumPositionProbe {
  public sealed class MiniMapForm:Form {
   public readonly NavigationSession Navigation=new NavigationSession();
   public List<AllyPosition> Allies=new List<AllyPosition>();
+  public readonly StaticPoiLayer Objects=new StaticPoiLayer();
+  public List<HubMarker> NavigationMarkers{get{var result=new List<HubMarker>(Markers);result.AddRange(Objects.Visible);return result;}}
+  public HubMarker FindMarker(string id){return Markers.Find(m=>m.Id==id)??Objects.FindMarker(id);}
+  IEnumerable<HubMarker> DisplayMarkers(){foreach(HubMarker m in Objects.Visible)yield return m;foreach(HubMarker m in Markers)yield return m;}
   public Position Current;public List<HubMarker> Markers=new List<HubMarker>();public DateTime LastPosition=DateTime.MinValue,LastMarkers=DateTime.MinValue;
   public double NorthYaw=90;public bool NorthCalibrated;public bool SyncEnabled;public bool ShowNames=true;
   public string SyncStatus="HUB не подключён",MotionStatus="F8 — начать";public bool Locked=true;
@@ -69,8 +73,8 @@ namespace ScumPositionProbe {
    using(SolidBrush dim=new SolidBrush(Color.FromArgb(30,0,0,0)))g.FillRectangle(dim,field);
    using(Pen grid=new Pen(Color.FromArgb(105,230,237,240),1))for(int k=0;k<=5;k++){float x=(float)(field.Left+(k/5.0-left)/span*size),y=(float)(field.Top+(k/5.0-top)/span*size);g.DrawLine(grid,x,field.Top,x,field.Bottom);g.DrawLine(grid,field.Left,y,field.Right,y);}
    DrawNavigation(g,field,left,top,span);
-   foreach(HubMarker marker in Markers){float x=(float)(field.Left+(marker.X-left)/span*size),y=(float)(field.Top+(marker.Y-top)/span*size);if(x<field.Left-20||x>field.Right+20||y<field.Top-20||y>field.Bottom+20)continue;
-    using(SolidBrush b=new SolidBrush(marker.Color))g.FillEllipse(b,x-4,y-4,8,8);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),2))g.DrawEllipse(p,x-4,y-4,8,8);
+   foreach(HubMarker marker in DisplayMarkers()){float x=(float)(field.Left+(marker.X-left)/span*size),y=(float)(field.Top+(marker.Y-top)/span*size);if(x<field.Left-20||x>field.Right+20||y<field.Top-20||y>field.Bottom+20)continue;
+    if(StaticPoiLayer.IsStatic(marker)){PointF[] diamond={new PointF(x,y-5),new PointF(x+5,y),new PointF(x,y+5),new PointF(x-5,y)};using(SolidBrush b=new SolidBrush(marker.Color))g.FillPolygon(b,diamond);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),1.5f))g.DrawPolygon(p,diamond);}else{using(SolidBrush b=new SolidBrush(marker.Color))g.FillEllipse(b,x-4,y-4,8,8);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),2))g.DrawEllipse(p,x-4,y-4,8,8);}
     if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);float labelX=Math.Max(field.Left+2,Math.Min(field.Right-text.Width-6,x-text.Width/2-2)),labelY=y-text.Height-8;using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,labelX,labelY,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,labelX+2,labelY);}}
    }
    List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
@@ -114,4 +118,3 @@ namespace ScumPositionProbe {
   sealed class StopwatchAdapter {readonly System.Diagnostics.Stopwatch clock=System.Diagnostics.Stopwatch.StartNew();double prev;public double Step(){double n=clock.Elapsed.TotalSeconds,d=n-prev;prev=n;return d;}}
  }
 }
-

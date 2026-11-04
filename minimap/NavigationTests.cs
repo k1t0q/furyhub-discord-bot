@@ -22,6 +22,13 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   StaticPoiLayer poi=new StaticPoiLayer(false);Check(poi.Visible.Count==77,"built-in POI catalog count");
+   int[] expectedPoi={20,4,8,3,42};for(int i=0;i<StaticPoiLayer.Categories.Length;i++)Check(poi.Count(StaticPoiLayer.Categories[i])==expectedPoi[i],"POI category counts");
+   foreach(HubMarker marker in poi.Visible){Check(StaticPoiLayer.IsStatic(marker)&&!HubClient.CanRefreshStash(marker),"built-in objects cannot be refreshed as squad stashes");Check(marker.Id.StartsWith("poi-")&&marker.X>=0&&marker.X<=1&&marker.Y>=0&&marker.Y<=1,"static POI identity and location");}
+   poi.SetEnabled("police",false);Check(poi.Visible.Count==57&&poi.Count("police")==20,"hiding POIs preserves catalog");poi.SetEnabled("police",true);Check(poi.Visible.Count==77,"POI category re-enable");
+   var localDestinations=ProbeForm.GroupNavigationMarkers(poi.Visible,null,750,320,320);Check(localDestinations.Exists(r=>r.Header=="TEC1")&&localDestinations.Exists(r=>r.Header=="СЕКРЕТКИ")&&localDestinations.FindAll(r=>r.Marker!=null).Count==77,"offline built-in destination groups");
+   var squadOnly=new List<HubMarker>{new HubMarker{Id="stash-post-4",Kind="stash",Name="Stash",X=.5,Y=.5}};var mergedDestinations=new List<HubMarker>(squadOnly);mergedDestinations.AddRange(poi.Visible);Check(squadOnly.Count==1&&ProbeForm.GroupNavigationMarkers(mergedDestinations,null,750,320,320).FindAll(r=>r.Marker!=null).Count==78,"built-in POIs do not mutate HUB snapshot");
+   results.Add("PASS built-in POI catalog, five category filters, offline navigation and HUB snapshot isolation");
    var inbox=new AllyInbox();object owner=new object();for(int i=0;i<10000;i++)inbox.Publish(owner,new List<AllyPosition>{new AllyPosition{Nick=i.ToString()}});
    using(HubClient reportHub=new HubClient())using(AllyLive report=new AllyLive(reportHub)){
     var json=new System.Web.Script.Serialization.JavaScriptSerializer();

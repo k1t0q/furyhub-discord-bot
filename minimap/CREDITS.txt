@@ -15,3 +15,11 @@ https://scum-hub.ru/
 https://github.com/k1t0q/scum-squad-hub
 
 SCUM and other product names belong to their respective owners.
+
+Built-in SCUM POI coordinates (collected 2026-11-05):
+SCUMSA public map cards: https://scumsa.com/map/
+20 police stations, 4 abandoned bunkers, 3 research facilities, 42 WW2 bunkers.
+Ribbon Gaming bunker catalog: https://www.ribbongaming.com/things-bunkers.json
+8 secret bunkers; published metre coordinates converted to centimetres.
+Coordinates are published map pins, not independently checked in-game.
+WW2 coverage is incomplete: original requested map showed 53 locations.

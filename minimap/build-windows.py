@@ -23,7 +23,7 @@ refs = cache / 'build' / '.NETFramework' / 'v4.8'
 args = ['mcs', '-nostdlib', '-target:winexe', '-out:SCUM_HUB_MiniMap.exe', '-win32icon:SH.ico']
 for name in ['mscorlib', 'System', 'System.Core', 'System.Drawing', 'System.Windows.Forms', 'System.Web.Extensions', 'System.Net.Http']:
     args.append('-r:' + str(refs / (name + '.dll')))
-for name in ['SH.ico', 'map.jpg', 'roads.bin', 'NAVIGATION-NOTICES.txt', 'CREDITS.txt']:
+for name in ['SH.ico', 'map.jpg', 'roads.bin', 'NAVIGATION-NOTICES.txt', 'CREDITS.txt', 'static-poi.json']:
     args.append('-resource:' + name + ',ScumPositionProbe.' + name)
-args.extend(['PositionProbe.cs', 'HubClient.cs', 'MiniMap.cs', 'MarkerMergeTests.cs', 'KeyCapture.cs', 'AllyLive.cs', 'RoadNavigation.cs', 'NavigationTests.cs'])
+args.extend(['PositionProbe.cs', 'HubClient.cs', 'MiniMap.cs', 'MarkerMergeTests.cs', 'KeyCapture.cs', 'AllyLive.cs', 'RoadNavigation.cs', 'NavigationTests.cs', 'StaticPoi.cs'])
 subprocess.run(args, cwd=ROOT, check=True)
