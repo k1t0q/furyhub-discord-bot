@@ -20,7 +20,7 @@ namespace ScumPositionProbe {
     double x=Convert.ToDouble(row["map_x"]),y=Convert.ToDouble(row["map_y"]);string id=Convert.ToString(row["id"]),sector=Convert.ToString(row["sector"]);
     if(!id.StartsWith("poi-",StringComparison.Ordinal)||!ids.Add(id)||Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1||MapMath.Sector(x,y)!=sector)throw new InvalidDataException("Некорректные координаты встроенного объекта.");
     string key=category+":"+sector;int ordinal;counts.TryGetValue(key,out ordinal);counts[key]=++ordinal;
-    entries.Add(new HubMarker{Id=id,Kind="poi_"+category,Name=Labels[index]+(ordinal>1?" №"+ordinal:""),X=x,Y=y,Color=Colors[index]});
+    entries.Add(new HubMarker{Id=id,Kind="poi_"+category,Name=Labels[index]+" "+sector+(ordinal>1?" №"+ordinal:""),X=x,Y=y,Color=Colors[index]});
    }
   }
    if(persist)try{string path=UserSettings.PathFor("poi-layers.txt");if(File.Exists(path)){enabled.Clear();foreach(string key in File.ReadAllText(path).Split(','))if(Array.IndexOf(Categories,key)>=0)enabled.Add(key);}}catch{}

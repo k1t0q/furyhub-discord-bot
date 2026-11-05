@@ -24,7 +24,7 @@ namespace ScumPositionProbe {
   public static void Run(List<string> results){
    StaticPoiLayer poi=new StaticPoiLayer(false);Check(poi.Visible.Count==77,"built-in POI catalog count");
    int[] expectedPoi={20,4,8,3,42};for(int i=0;i<StaticPoiLayer.Categories.Length;i++)Check(poi.Count(StaticPoiLayer.Categories[i])==expectedPoi[i],"POI category counts");
-   foreach(HubMarker marker in poi.Visible){Check(StaticPoiLayer.IsStatic(marker)&&!HubClient.CanRefreshStash(marker),"built-in objects cannot be refreshed as squad stashes");Check(marker.Id.StartsWith("poi-")&&marker.X>=0&&marker.X<=1&&marker.Y>=0&&marker.Y<=1,"static POI identity and location");}
+   foreach(HubMarker marker in poi.Visible){Check(StaticPoiLayer.IsStatic(marker)&&!HubClient.CanRefreshStash(marker),"built-in objects cannot be refreshed as squad stashes");Check(marker.Name.Contains(" "+MapMath.Sector(marker.X,marker.Y)),"all built-in labels contain their sector");Check(marker.Id.StartsWith("poi-")&&marker.X>=0&&marker.X<=1&&marker.Y>=0&&marker.Y<=1,"static POI identity and location");}
    poi.SetEnabled("police",false);Check(poi.Visible.Count==57&&poi.Count("police")==20,"hiding POIs preserves catalog");poi.SetEnabled("police",true);Check(poi.Visible.Count==77,"POI category re-enable");
    var localDestinations=ProbeForm.GroupNavigationMarkers(poi.Visible,null,750,320,320);Check(localDestinations.Exists(r=>r.Header=="TEC1")&&localDestinations.Exists(r=>r.Header=="СЕКРЕТКИ")&&localDestinations.FindAll(r=>r.Marker!=null).Count==77,"offline built-in destination groups");
    var squadOnly=new List<HubMarker>{new HubMarker{Id="stash-post-4",Kind="stash",Name="Stash",X=.5,Y=.5}};var mergedDestinations=new List<HubMarker>(squadOnly);mergedDestinations.AddRange(poi.Visible);Check(squadOnly.Count==1&&ProbeForm.GroupNavigationMarkers(mergedDestinations,null,750,320,320).FindAll(r=>r.Marker!=null).Count==78,"built-in POIs do not mutate HUB snapshot");
@@ -75,7 +75,10 @@ namespace ScumPositionProbe {
    Check(destinations[0].Header=="НА МИНИКАРТЕ"&&destinations[1].Marker.Id=="near"&&destinations[2].Marker.Id=="corner","visible destinations lead the list sorted by distance");
    Check(destinations.FindAll(row=>row.Marker!=null&&row.Marker.Id=="near").Count==2&&destinations.Exists(row=>row.Header=="СХРОНЫ")&&destinations.Exists(row=>row.Header=="БАЗЫ")&&destinations.Exists(row=>row.Header=="ДРУГОЕ"),"complete category lists remain available below nearby shortcuts");
    var moved=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{farMarker,corner,near},World(.7f,.7f),500,320,320);
-   Check(moved[1].Marker.Id=="far"&&!moved.Exists(row=>row.Marker!=null&&row.Marker.Id=="near"&&row.MetresAway.HasValue),"nearby shortcuts follow current player position");
+   Check(moved[1].Marker.Id=="far"&&moved.Exists(row=>row.Marker!=null&&row.Marker.Id=="near"&&row.MetresAway.HasValue),"nearby shortcuts follow current player position");
+   foreach(var row in destinations)if(row.Marker!=null)Check(row.MetresAway.HasValue&&row.DistanceText.EndsWith(" м"),"every destination has metres, including distant categories");
+   Check(ProbeForm.GroupNavigationMarkers(poi.Visible,viewer,500,320,320).FindAll(row=>row.Marker!=null&&!row.MetresAway.HasValue).Count==0,"all 77 POIs have distance");
+   Check(localDestinations.FindAll(row=>row.Marker!=null&&row.MetresAway.HasValue).Count==0,"missing position does not invent distances");
    results.Add("PASS visible-map destination shortcuts, nearest-first order, zoom, viewport corners, footer and movement");
    RoadGraph dry=WalkingFixture(false);PointF nearby=new PointF(.4f,.4f);RoadRoute walk=dry.Find(nearby,Goal(.41f,.4f),TravelMode.Foot);
    Check(walk.DirectFoot&&walk.Points.Length==2&&Math.Abs(walk.Remaining-RoadGeometry.Distance(nearby,walk.Target))<.1,"nearby marker avoids the road detour");
