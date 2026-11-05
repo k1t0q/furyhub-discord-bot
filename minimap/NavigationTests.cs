@@ -52,6 +52,11 @@ namespace ScumPositionProbe {
    }
    Check(!AllyLive.Stale(presenceNow,presenceNow.AddSeconds(7))&&AllyLive.Stale(presenceNow,presenceNow.AddMilliseconds(7001)),"five-second stationary confirmations do not flash orange");
    results.Add("PASS five-minute stationary ambush, five-second fresh confirmations, seven-second stale colour and thirty-second expiry");
+   Check(MapZoom.Next(100,false)==300&&MapZoom.Next(300,false)==500&&MapZoom.Next(500,false)==700&&MapZoom.Next(700,false)==900,"fixed zoom sequence");
+   Check(MapZoom.Next(100,true)==100&&MapZoom.Next(7500,false)==7500&&MapZoom.Next(300,true)==100,"zoom direction and bounds");
+   Check(MapZoom.Snap(750)==700&&MapZoom.Snap(150)==100&&MapZoom.Snap(7600)==7500,"legacy saved zoom snaps to fixed steps");
+   DateTime noticeNow=DateTime.UtcNow,noticeUntil=noticeNow.AddSeconds(2);Check(MapZoom.NoticeOpacity(noticeUntil,noticeNow)==1&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(1.8))>0&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(2))==0,"zoom badge expires after two seconds");
+   results.Add("PASS fixed 200m zoom steps, saved values, limits and two-second badge");
    ZoomKeys zoom=new ZoomKeys();Check(zoom.Update(true,true,false,0)==1&&zoom.Update(true,true,false,25)==0&&zoom.Update(true,true,false,400)==1,"zoom press and delayed repeat");
    Check(zoom.Update(false,true,false,425)==0&&zoom.Update(true,false,true,450)==-1,"focus/menu guard and zoom out");
    Check(zoom.Update(true,true,true,500)==0&&zoom.Update(true,false,false,525)==0&&zoom.Update(true,true,false,550)==1,"opposing arrows and release reset");results.Add("PASS keyboard zoom direction, repeat, focus guard and release");

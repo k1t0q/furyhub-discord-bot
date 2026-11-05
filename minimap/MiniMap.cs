@@ -22,6 +22,12 @@ namespace ScumPositionProbe {
   public static string RouteFooter(string sector,double? remaining){return remaining.HasValue?Math.Ceiling(Math.Max(0,remaining.Value)).ToString("0",CultureInfo.InvariantCulture)+" м · "+sector:sector;}
   public static string Sector(double x,double y){if(x<0||x>=1||y<0||y>=1)return "ВНЕ КАРТЫ";return "DCBAZ"[(int)(y*5)].ToString()+"43210"[(int)(x*5)];}
  }
+ public static class MapZoom {
+  public const double Minimum=100,Maximum=7500,Step=200;
+  public static double Snap(double value){return Math.Max(Minimum,Math.Min(Maximum,Minimum+Math.Round((value-Minimum)/Step,MidpointRounding.AwayFromZero)*Step));}
+  public static double Next(double value,bool closer){return Snap(Snap(value)+(closer?-Step:Step));}
+  public static double NoticeOpacity(DateTime until,DateTime now){return Math.Max(0,Math.Min(1,(until-now).TotalSeconds/.25));}
+ }
  public sealed class MiniMapForm:Form {
   public readonly NavigationSession Navigation=new NavigationSession();
   public List<AllyPosition> Allies=new List<AllyPosition>();
@@ -32,7 +38,7 @@ namespace ScumPositionProbe {
   public Position Current;public List<HubMarker> Markers=new List<HubMarker>();public DateTime LastPosition=DateTime.MinValue,LastMarkers=DateTime.MinValue;
   public double NorthYaw=90;public bool NorthCalibrated;public bool SyncEnabled;public bool ShowNames=true;
   public string SyncStatus="HUB не подключён",MotionStatus="F8 — начать";public bool Locked=true;
-  Bitmap map;double renderedX=.5,renderedY=.5,renderedHeading;double radius=750;Point drag;bool dragging;
+  Bitmap map;double renderedX=.5,renderedY=.5,renderedHeading;double radius=700;DateTime zoomNoticeUntil=DateTime.MinValue;Point drag;bool dragging;
   readonly Timer animation=new Timer();
   [DllImport("user32.dll",EntryPoint="GetWindowLong")]static extern int GetWindowLong(IntPtr h,int n);
   [DllImport("user32.dll",EntryPoint="SetWindowLong")]static extern int SetWindowLong(IntPtr h,int n,int v);
@@ -54,8 +60,8 @@ namespace ScumPositionProbe {
   public float SelfArrowScale=1f,AllyArrowScale=1f;
   public double ViewRadius{get{return radius;}}
   public event EventHandler ZoomChanged;
-  public void SetZoomRadius(double value){if(Double.IsNaN(value)||Double.IsInfinity(value))return;radius=Math.Max(150,Math.Min(7600,value));Invalidate();if(ZoomChanged!=null)ZoomChanged(this,EventArgs.Empty);}
-  public void ChangeZoom(bool closer){SetZoomRadius(radius*(closer?.8:1.25));}
+  public void SetZoomRadius(double value){if(Double.IsNaN(value)||Double.IsInfinity(value))return;double next=MapZoom.Snap(value);if(next==radius)return;radius=next;Invalidate();if(ZoomChanged!=null)ZoomChanged(this,EventArgs.Empty);}
+  public void ChangeZoom(bool closer){SetZoomRadius(MapZoom.Next(radius,closer));zoomNoticeUntil=DateTime.UtcNow.AddSeconds(2);Invalidate();}
   public void PausePainting(bool pause){if(pause)animation.Stop();else if(Visible)animation.Start();}
   public void ToggleLock(){Locked=!Locked;if(IsHandleCreated){int ex=GetWindowLong(Handle,-20);SetWindowLong(Handle,-20,Locked?ex|0x20|0x08000000:(ex&~0x20)|0x08000000);}Invalidate();}
   public void SetPosition(Position p){Navigation.Update(p);Current=p;LastPosition=DateTime.UtcNow;{renderedX=MapMath.NormX(p.X);renderedY=MapMath.NormY(p.Y);renderedHeading=p.HasYaw?MapMath.NormalizeAngle(p.Yaw-NorthYaw):0;}Invalidate();}
@@ -93,6 +99,14 @@ namespace ScumPositionProbe {
     using(SolidBrush b=new SolidBrush(age>3?Color.FromArgb(240,164,68):Color.FromArgb(97,235,244)))g.FillPolygon(b,vertices);using(Pen p=new Pen(Color.FromArgb(12,25,32),2))g.DrawPolygon(p,vertices);g.Restore(arrow);
    }
    g.Restore(clip);
+   double zoomOpacity=MapZoom.NoticeOpacity(zoomNoticeUntil,DateTime.UtcNow);
+   if(zoomOpacity>0){using(Font font=new Font("Segoe UI",9,FontStyle.Bold)){
+    string text="Радиус "+radius.ToString("0",CultureInfo.InvariantCulture)+" м";SizeF extent=g.MeasureString(text,font);
+    RectangleF badge=new RectangleF(8,8,extent.Width+14,extent.Height+8);
+    using(SolidBrush background=new SolidBrush(Color.FromArgb((int)(205*zoomOpacity),7,13,17)))g.FillRectangle(background,badge);
+    using(Pen border=new Pen(Color.FromArgb((int)(95*zoomOpacity),130,155,164)))g.DrawRectangle(border,badge.X,badge.Y,badge.Width,badge.Height);
+    using(SolidBrush foreground=new SolidBrush(Color.FromArgb((int)(255*zoomOpacity),233,240,242)))g.DrawString(text,font,foreground,badge.X+7,badge.Y+4);
+   }}
    string heading=Current==null?"Нет позиции":Current.HasYaw?MapMath.Direction(renderedHeading)+" · "+MapMath.NormalizeAngle(renderedHeading).ToString("0")+"°":"Нет угла";
    string sector=Current==null?"":MapMath.Sector(nx,ny);
    string status=age>3&&Current!=null?" · "+age.ToString("0")+" с назад":!NorthCalibrated?" · настрой север":"";
