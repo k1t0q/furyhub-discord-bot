@@ -22,3 +22,5 @@ jobs:
           PORT="${SSH_PORT:-22}"
           ssh-keyscan -p "$PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status; systemctl show scum-hub-bot -p NRestarts -p ActiveEnterTimestamp; curl -fsS --max-time 30 http://127.0.0.1:3000/health'
+
+# Recheck D1, Discord and ImageKit with the retired Supabase project paused.
