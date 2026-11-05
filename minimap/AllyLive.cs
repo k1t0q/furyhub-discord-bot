@@ -8,7 +8,21 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 namespace ScumPositionProbe {
- public sealed class AllyPosition {public string Id,Nick;public double X,Y,Heading;public bool HasHeading;public DateTime Observed;}
+ public sealed class AllyPosition {public string Id,Nick;public double X,Y,Heading;public bool HasHeading;public DateTime Observed;public long SourceAt;}
+ internal sealed class AllyMotion {
+  sealed class Track {public AllyPosition Target;public double X,Y,Heading;public DateTime Started,Received;}
+  readonly Dictionary<string,Track> tracks=new Dictionary<string,Track>();
+  const double BlendMs=100;
+  static AllyPosition At(Track t,DateTime now){double f=Math.Max(0,Math.Min(1,(now-t.Started).TotalMilliseconds/BlendMs));return new AllyPosition{Id=t.Target.Id,Nick=t.Target.Nick,X=t.X+(t.Target.X-t.X)*f,Y=t.Y+(t.Target.Y-t.Y)*f,Heading=MapMath.NormalizeAngle(t.Heading+MapMath.DeltaAngle(t.Heading,t.Target.Heading)*f),HasHeading=t.Target.HasHeading,Observed=t.Target.Observed,SourceAt=t.Target.SourceAt};}
+  public AllyPosition Render(AllyPosition sample,DateTime now){Track t;bool found=tracks.TryGetValue(sample.Id,out t);
+   if(!found){t=new Track{Target=sample,X=sample.X,Y=sample.Y,Heading=sample.Heading,Started=now,Received=now};tracks[sample.Id]=t;return At(t,now);}
+   bool moved=t.Target.X!=sample.X||t.Target.Y!=sample.Y||t.Target.HasHeading!=sample.HasHeading||MapMath.DeltaAngle(t.Target.Heading,sample.Heading)!=0;
+   if(moved){AllyPosition rendered=At(t,now);bool snap=(now-t.Received).TotalMilliseconds>1000||Math.Sqrt(Math.Pow(sample.X-t.Target.X,2)+Math.Pow(sample.Y-t.Target.Y,2))>10000;t.X=snap?sample.X:rendered.X;t.Y=snap?sample.Y:rendered.Y;t.Heading=snap?sample.Heading:rendered.Heading;t.Started=now;t.Received=now;t.Target=sample;}
+   else {t.Target=sample;}
+   return At(t,now);
+  }
+  public void Clear(){tracks.Clear();}
+ }
  internal sealed class AllyInbox {
   readonly object gate=new object();object owner;List<AllyPosition> latest;
   public void Publish(object source,List<AllyPosition> peers){lock(gate){owner=source;latest=peers;}}
@@ -72,7 +86,7 @@ namespace ScumPositionProbe {
      if(packet==null&&MonotonicMs()-lastSent>=HeartbeatMs)packet="{\"ping\":true}";
      if(packet!=null){await Send(ws,packet);lastSent=MonotonicMs();if(sendingRevision>0){Interlocked.Increment(ref positionSent);lock(gate){sentRevision=sendingRevision;}}}
      if(MonotonicMs()>=nextFlow){nextFlow=MonotonicMs()+5000;diagnosticAsked=MonotonicMs();AddReport("request",null);await Send(ws,"{\"diagnostic\":true}");}
-     await Task.Delay(150,cancel.Token);
+     await Task.Delay(100,cancel.Token);
     }
     ws.Abort();
    }}catch(HubExpiredException){if(!cancel.IsCancellationRequested)Report("Сессия HUB завершена. Войди снова; метки сохранены.");break;}
@@ -86,7 +100,7 @@ namespace ScumPositionProbe {
    List<AllyPosition> peers=ParsePeers(payload,DateTime.UtcNow);Interlocked.Increment(ref receivedCount);if(!connectionConfirmed){connectionConfirmed=true;Report("Союзники: связь подтверждена · отчёт в настройках");}if(Updated!=null)Updated(peers);
   }}
   public static List<AllyPosition> ParsePeers(string payload,DateTime clientNow){
-   var root=(Dictionary<string,object>)new JavaScriptSerializer().DeserializeObject(payload);string self=Convert.ToString(root["self"]);double now=Convert.ToDouble(root["now"]);List<AllyPosition> peers=new List<AllyPosition>();foreach(object raw in (object[])root["peers"]){var d=raw as Dictionary<string,object>;if(d==null||Convert.ToString(d["id"])==self)continue;double x=Convert.ToDouble(d["x"]),y=Convert.ToDouble(d["y"]);if(Double.IsNaN(x)||Double.IsNaN(y)||Math.Abs(x)>2000000||Math.Abs(y)>2000000)continue;string nick=Convert.ToString(d["nick"]);peers.Add(new AllyPosition{Id=Convert.ToString(d["id"]),Nick=nick.Length>32?nick.Substring(0,32):nick,X=x,Y=y,HasHeading=d["heading"]!=null,Heading=d["heading"]==null?0:Convert.ToDouble(d["heading"]),Observed=clientNow.AddMilliseconds(-Math.Max(0,Math.Min(86400000,now-Convert.ToDouble(d["at"]))))});}return peers;
+   var root=(Dictionary<string,object>)new JavaScriptSerializer().DeserializeObject(payload);string self=Convert.ToString(root["self"]);double now=Convert.ToDouble(root["now"]);List<AllyPosition> peers=new List<AllyPosition>();foreach(object raw in (object[])root["peers"]){var d=raw as Dictionary<string,object>;if(d==null||Convert.ToString(d["id"])==self)continue;double x=Convert.ToDouble(d["x"]),y=Convert.ToDouble(d["y"]);if(Double.IsNaN(x)||Double.IsNaN(y)||Math.Abs(x)>2000000||Math.Abs(y)>2000000)continue;string nick=Convert.ToString(d["nick"]);peers.Add(new AllyPosition{Id=Convert.ToString(d["id"]),Nick=nick.Length>32?nick.Substring(0,32):nick,X=x,Y=y,HasHeading=d["heading"]!=null,Heading=d["heading"]==null?0:Convert.ToDouble(d["heading"]),SourceAt=Convert.ToInt64(d["at"]),Observed=clientNow.AddMilliseconds(-Math.Max(0,Math.Min(86400000,now-Convert.ToDouble(d["at"]))))});}return peers;
   }
   public void Dispose(){cancel.Cancel();if(socket!=null)socket.Abort();}
  }

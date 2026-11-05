@@ -57,6 +57,15 @@ namespace ScumPositionProbe {
    Check(MapZoom.Snap(750)==700&&MapZoom.Snap(150)==100&&MapZoom.Snap(7600)==7500,"legacy saved zoom snaps to fixed steps");
    DateTime noticeNow=DateTime.UtcNow,noticeUntil=noticeNow.AddSeconds(2);Check(MapZoom.NoticeOpacity(noticeUntil,noticeNow)==1&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(1.8))>0&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(2))==0,"zoom badge expires after two seconds");
    results.Add("PASS fixed 200m zoom steps, saved values, limits and two-second badge");
+   AllyMotion motion=new AllyMotion();DateTime renderNow=DateTime.UtcNow;
+   var firstAlly=new AllyPosition{Id="friend",Nick="Friend",X=100,Y=200,Heading=350,HasHeading=true,Observed=renderNow,SourceAt=1};
+   Check(motion.Render(firstAlly,renderNow).X==100,"ally begins at exact coordinate");
+   var nextAlly=new AllyPosition{Id="friend",Nick="Friend",X=200,Y=200,Heading=10,HasHeading=true,Observed=renderNow,SourceAt=2};
+   Check(motion.Render(nextAlly,renderNow.AddMilliseconds(100)).X==100,"movement starts without a jump");
+   var halfway=motion.Render(nextAlly,renderNow.AddMilliseconds(150));Check(Math.Abs(halfway.X-150)<.01&&Math.Abs(MapMath.DeltaAngle(halfway.Heading,0))<.01,"position and north-crossing heading interpolate");
+   Check(motion.Render(nextAlly,renderNow.AddMilliseconds(500)).X==200,"stopped ally stays on exact coordinate without extrapolation");
+   var resumed=new AllyPosition{Id="friend",Nick="Friend",X=250,Y=200,Heading=10,Observed=renderNow.AddSeconds(3),SourceAt=3};Check(motion.Render(resumed,renderNow.AddSeconds(3)).X==250,"fresh position after a gap snaps without invented motion");
+   results.Add("PASS ally exact coordinates, smooth 100ms blending, stationary lock and stale-gap recovery");
    ZoomKeys zoom=new ZoomKeys();Check(zoom.Update(true,true,false,0)==1&&zoom.Update(true,true,false,25)==0&&zoom.Update(true,true,false,400)==1,"zoom press and delayed repeat");
    Check(zoom.Update(false,true,false,425)==0&&zoom.Update(true,false,true,450)==-1,"focus/menu guard and zoom out");
    Check(zoom.Update(true,true,true,500)==0&&zoom.Update(true,false,false,525)==0&&zoom.Update(true,true,false,550)==1,"opposing arrows and release reset");results.Add("PASS keyboard zoom direction, repeat, focus guard and release");

@@ -39,7 +39,7 @@ namespace ScumPositionProbe {
   public double NorthYaw=90;public bool NorthCalibrated;public bool SyncEnabled;public bool ShowNames=true;
   public string SyncStatus="HUB не подключён",MotionStatus="F8 — начать";public bool Locked=true;
   Bitmap map;double renderedX=.5,renderedY=.5,renderedHeading;double radius=700;DateTime zoomNoticeUntil=DateTime.MinValue;Point drag;bool dragging;
-  readonly Timer animation=new Timer();
+  readonly Timer animation=new Timer();readonly AllyMotion allyMotion=new AllyMotion();
   [DllImport("user32.dll",EntryPoint="GetWindowLong")]static extern int GetWindowLong(IntPtr h,int n);
   [DllImport("user32.dll",EntryPoint="SetWindowLong")]static extern int SetWindowLong(IntPtr h,int n,int v);
   [DllImport("user32.dll")]static extern bool SetLayeredWindowAttributes(IntPtr window,uint color,byte alpha,uint flags);
@@ -51,7 +51,7 @@ namespace ScumPositionProbe {
   protected override bool ShowWithoutActivation{get{return true;}}
   public MiniMapForm(){Text="SCUM MINIMAP";FormBorderStyle=FormBorderStyle.None;ClientSize=new Size(350,350);StartPosition=FormStartPosition.Manual;Location=new Point(25,120);TopMost=true;ShowInTaskbar=false;BackColor=Color.FromArgb(10,16,20);DoubleBuffered=true;
    using(Stream embedded=typeof(MiniMapForm).Assembly.GetManifestResourceStream("ScumPositionProbe.map.jpg")){if(embedded!=null){using(Image image=Image.FromStream(embedded))map=new Bitmap(image);}else{string path=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"map.jpg");if(File.Exists(path)){using(Image image=Image.FromFile(path))map=new Bitmap(image);}}}
-   animation.Interval=50;animation.Tick+=delegate{if(!dragging)Invalidate();};animation.Start();VisibleChanged+=delegate{if(Visible)animation.Start();else animation.Stop();};
+   animation.Interval=16;animation.Tick+=delegate{if(!dragging)Invalidate();};animation.Start();VisibleChanged+=delegate{if(Visible)animation.Start();else animation.Stop();};
    MouseWheel+=delegate(object sender,MouseEventArgs e){ChangeZoom(e.Delta>0);};
    MouseDown+=delegate(object sender,MouseEventArgs e){if(e.Button!=MouseButtons.Left||Locked)return;drag=e.Location;dragging=true;Capture=true;};
    MouseMove+=delegate(object sender,MouseEventArgs e){if(dragging&&e.Button==MouseButtons.Left)Location=new Point(Left+e.X-drag.X,Top+e.Y-drag.Y);};MouseUp+=delegate{dragging=false;Capture=false;};MouseCaptureChanged+=delegate{if(!Capture)dragging=false;};
@@ -84,14 +84,11 @@ namespace ScumPositionProbe {
     if(StaticPoiLayer.IsStatic(marker)){PointF[] diamond={new PointF(x,y-5),new PointF(x+5,y),new PointF(x,y+5),new PointF(x-5,y)};using(SolidBrush b=new SolidBrush(marker.Color))g.FillPolygon(b,diamond);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),1.5f))g.DrawPolygon(p,diamond);}else{using(SolidBrush b=new SolidBrush(marker.Color))g.FillEllipse(b,x-4,y-4,8,8);using(Pen p=new Pen(Color.FromArgb(230,5,8,10),2))g.DrawEllipse(p,x-4,y-4,8,8);}
     if(ShowNames){using(Font f=new Font("Segoe UI",8,FontStyle.Bold)){SizeF text=g.MeasureString(marker.Name,f);float labelX=Math.Max(field.Left+2,Math.Min(field.Right-text.Width-6,x-text.Width/2-2)),labelY=y-text.Height-8;using(SolidBrush b=new SolidBrush(Color.FromArgb(190,5,10,14)))g.FillRectangle(b,labelX,labelY,text.Width+4,text.Height);g.DrawString(marker.Name,f,Brushes.White,labelX+2,labelY);}}
    }
-   List<RectangleF> names=new List<RectangleF>();List<PointF> allyDots=new List<PointF>();
-   DateTime alliesNow=DateTime.UtcNow;
-   foreach(AllyPosition ally in Allies){if(!AllyLive.Visible(ally.Observed,alliesNow))continue;float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
-    float realX=ax,realY=ay;
-    for(int attempt=0;attempt<81;attempt++){bool occupied=Current!=null&&Math.Pow(ax-midX,2)+Math.Pow(ay-midY,2)<Math.Pow(11*SelfArrowScale+8*AllyArrowScale,2);foreach(PointF dot in allyDots)if(Math.Pow(ax-dot.X,2)+Math.Pow(ay-dot.Y,2)<Math.Pow(11*AllyArrowScale,2)){occupied=true;break;}if(!occupied)break;double angle=attempt*2.399963,r=16*Math.Max(SelfArrowScale,AllyArrowScale)+Math.Sqrt(attempt)*4;ax=realX+(float)(Math.Cos(angle)*r);ay=realY+(float)(Math.Sin(angle)*r);}
-    allyDots.Add(new PointF(ax,ay));if(Math.Abs(ax-realX)+Math.Abs(ay-realY)>1){using(Pen link=new Pen(Color.FromArgb(150,123,225,146)))g.DrawLine(link,realX,realY,ax,ay);g.FillEllipse(Brushes.LightGreen,realX-1,realY-1,2,2);}
+   List<RectangleF> names=new List<RectangleF>();
+   DateTime alliesNow=DateTime.UtcNow;if(Allies.Count==0)allyMotion.Clear();
+   foreach(AllyPosition sample in Allies){if(!AllyLive.Visible(sample.Observed,alliesNow))continue;AllyPosition ally=allyMotion.Render(sample,alliesNow);float ax=(float)(field.Left+(MapMath.NormX(ally.X)-left)/span*size),ay=(float)(field.Top+(MapMath.NormY(ally.Y)-top)/span*size);if(ax<0||ay<0||ax>Width||ay>Height)continue;
     double old=(DateTime.UtcNow-ally.Observed).TotalSeconds;GraphicsState ast=g.Save();g.TranslateTransform(ax,ay);g.RotateTransform((float)ally.Heading);g.ScaleTransform(AllyArrowScale,AllyArrowScale);
-    PointF[] small={new PointF(0,-8),new PointF(5,6),new PointF(0,2.5f),new PointF(-5,6)};
+    PointF[] small={new PointF(0,-11),new PointF(8,8),new PointF(0,4),new PointF(-8,8)};
     using(SolidBrush b=new SolidBrush(AllyLive.Stale(ally.Observed,alliesNow)?Color.FromArgb(240,164,68):Color.FromArgb(123,225,146)))g.FillPolygon(b,small);using(Pen pen=new Pen(Color.FromArgb(230,10,20,24),1))g.DrawPolygon(pen,small);g.Restore(ast);
     using(Font f=new Font("Segoe UI",8)){string label=ally.Nick;SizeF extent=g.MeasureString(label,f);RectangleF rect=new RectangleF(Math.Max(2,Math.Min(Width-extent.Width-8,ax+8*AllyArrowScale)),Math.Max(2,ay-10),extent.Width+4,extent.Height);for(int shift=0;shift<20;shift++){bool overlaps=false;foreach(RectangleF prior in names)if(prior.IntersectsWith(rect)){overlaps=true;break;}if(!overlaps)break;rect.Y+=extent.Height+2;if(rect.Bottom>field.Bottom-26)rect.Y=2+shift*2;}names.Add(rect);using(Pen line=new Pen(Color.FromArgb(100,125,210,150)))g.DrawLine(line,ax,ay,rect.Left,rect.Top+rect.Height/2);using(SolidBrush bg=new SolidBrush(Color.FromArgb(190,6,12,16)))g.FillRectangle(bg,rect);g.DrawString(label,f,AllyLive.Stale(ally.Observed,alliesNow)?Brushes.Orange:Brushes.LightGreen,rect.Left+2,rect.Top);}
    }
