@@ -1,5 +1,8 @@
-name: Deploy Discord notification optimization
+name: Deploy D1-only Discord bot
 on:
+  push:
+    branches: [scum-hub-migration]
+    paths: [src/server.js, .github/workflows/migration-optimize.yml]
   workflow_dispatch:
 concurrency:
   group: discord-d1-migration-deploy
