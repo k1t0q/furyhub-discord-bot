@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: measured ally flow report and persistent eight-second stash feedback
+# Approved release: 77 local SCUM objects, third tab, nearest-first categories and route metres
 on:
   push:
     branches: [scum-hub-migration]
@@ -14,6 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Windows executable
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           sudo apt-get update -qq
