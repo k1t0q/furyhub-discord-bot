@@ -32,6 +32,10 @@ namespace ScumPositionProbe {
    if(Focused&&ShowFocusCues)ControlPaint.DrawFocusRectangle(e.Graphics,Rectangle.Inflate(ClientRectangle,-5,-5),ForeColor,fill);
   }
  }
+ public sealed class RoundedPanel:Panel {
+  public RoundedPanel(){SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);}
+  protected override void OnPaintBackground(PaintEventArgs e){e.Graphics.Clear(Parent==null?BackColor:Parent.BackColor);e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;using(GraphicsPath path=RoundedUi.Path(new RectangleF(0,0,Width,Height),9))using(SolidBrush brush=new SolidBrush(BackColor))e.Graphics.FillPath(brush,path);}
+ }
  // Fully painted selector: no native DarkComboBox chrome or native list scrollbar.
  public sealed class DarkComboBox:Control {
   public sealed class ItemCollection:System.Collections.ArrayList {
@@ -285,7 +289,7 @@ namespace ScumPositionProbe {
    CompactLabel(objectsPanel,"Выбери, какие категории показывать.",0,40,472,25);
    for(int i=0;i<StaticPoiLayer.Categories.Length;i++){
     string key=StaticPoiLayer.Categories[i];int y=88+i*66;
-    Panel row=new Panel{BackColor=Color.FromArgb(21,29,35)};MoveTo(row,objectsPanel,0,y,472,54);RoundedUi.Clip(row,9);
+    Panel row=new RoundedPanel{BackColor=Color.FromArgb(21,29,35)};MoveTo(row,objectsPanel,0,y,472,54);
     CheckBox box=new CheckBox{Name="poi-"+key,Text=StaticPoiLayer.Labels[i],Checked=mini.Objects.IsEnabled(key),AutoSize=false,Font=new Font("Segoe UI",10),ForeColor=ForeColor,BackColor=row.BackColor,Padding=new Padding(2,0,0,0)};MoveTo(box,row,14,10,354,34);
     Label count=CompactLabel(row,mini.Objects.Count(key).ToString(),386,14,68,26);count.TextAlign=ContentAlignment.MiddleRight;count.ForeColor=Color.FromArgb(145,160,171);
     box.CheckedChanged+=delegate{mini.Objects.SetEnabled(key,box.Checked);UpdateNavigationMarkers();mini.Invalidate();};
@@ -320,6 +324,7 @@ namespace ScumPositionProbe {
    objectsTab.PerformClick();Application.DoEvents();
    if(!objectsPanel.Visible||homePanel.Visible||settingsPanel.Visible)throw new Exception("Objects tab visibility incorrect");
    for(int i=0;i<StaticPoiLayer.Categories.Length;i++){string key=StaticPoiLayer.Categories[i];CheckBox box=(CheckBox)objectsPanel.Controls.Find("poi-"+key,true)[0];if(!box.Checked)throw new Exception("All POI categories must default on");box.Checked=false;Application.DoEvents();if(mini.Objects.IsEnabled(key))throw new Exception("POI filter did not hide category");box.Checked=true;}
+   foreach(Control row in objectsPanel.Controls)if(row is RoundedPanel)using(Bitmap image=new Bitmap(row.Width,row.Height)){row.DrawToBitmap(image,row.ClientRectangle);if(image.GetPixel(0,0).ToArgb()==image.GetPixel(row.Width-10,row.Height/2).ToArgb())throw new Exception("Object card corners must be rounded");}
    SaveUiPreview("ui-preview-objects.png");Console.WriteLine("PASS third objects tab, equal tab gaps, defaults and live filters");
    settingsTab.PerformClick();Application.DoEvents();
 
@@ -328,7 +333,7 @@ namespace ScumPositionProbe {
    mini.SetPosition(new Position{X=-445230,Y=297444});
    for(int i=0;i<30;i++)mini.Markers.Add(new HubMarker{Id="ui-test-"+i,Name=i==0?"Схрон на депо, пока почти пустой":"Схрон с припасами "+(i+1).ToString("00"),Kind="stash",X=.5,Y=.5});RebuildNavigationChoices();SaveUiPreview("ui-preview-home.png");navigationGoal.DroppedDown=true;Application.DoEvents();if(!navigationGoal.Enabled||!navigationGoal.DroppedDown||navigationGoal.DropDownWidth!=navigationGoal.Width||navigationGoal.DropDownHeight>240)throw new Exception("Destination popup geometry/state incorrect");NavigationChoice stable=(NavigationChoice)navigationGoal.SelectedItem;int stableIndex=navigationGoal.SelectedIndex;double beforeDistance=stable.MetresAway.Value;mini.SetPosition(new Position{X=-440230,Y=297444});RefreshNavigationDistances();if(!navigationGoal.DroppedDown||navigationGoal.SelectedIndex!=stableIndex||!Object.ReferenceEquals(stable,navigationGoal.SelectedItem)||Math.Abs(stable.MetresAway.Value-beforeDistance)<1)throw new Exception("Distance refresh rebuilt or changed popup selection");mini.SetPosition(new Position{X=-445230,Y=297444});RefreshNavigationDistances();
    SaveUiPreview("ui-preview-list.png",navigationGoal);navigationGoal.TestScrollInput();navigationGoal.DroppedDown=false;mini.Markers.Clear();RebuildNavigationChoices();navigationGoal.DroppedDown=true;Application.DoEvents();SaveUiPreview("ui-preview-poi-navigation.png",navigationGoal);navigationGoal.DroppedDown=false;
-   for(int i=0;i<navigationGoal.Items.Count;i++){NavigationChoice row=(NavigationChoice)navigationGoal.Items[i];if(row.Marker!=null&&row.Marker.Kind=="poi_secret_bunker"){navigationGoal.SelectedIndex=i;break;}}navigationGoal.DroppedDown=true;Application.DoEvents();SaveUiPreview("ui-preview-bunker-navigation.png",navigationGoal);navigationGoal.DroppedDown=false;
+   for(int i=0;i<navigationGoal.Items.Count;i++){NavigationChoice row=(NavigationChoice)navigationGoal.Items[i];if(row.Marker!=null&&row.Marker.Kind=="poi_secret_bunker"){navigationGoal.SelectedIndex=i;break;}}Activate();PumpUi(100);navigationGoal.DroppedDown=true;PumpUi(100);if(!navigationGoal.DroppedDown)throw new Exception("POI category popup did not reopen");SaveUiPreview("ui-preview-bunker-navigation.png",navigationGoal);navigationGoal.DroppedDown=false;
    DisconnectHub();Application.DoEvents();if(!loginPanel.Visible||connectedPanel.Visible||!hubCode.Visible)throw new Exception("Disconnect did not restore login");
    Close();
   }
