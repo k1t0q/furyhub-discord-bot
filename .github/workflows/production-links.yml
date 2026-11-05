@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release: 77 local SCUM objects, third tab, nearest-first categories and route metres
+# Approved release v1.1: fixed 200m radius steps and two-second zoom badge
 on:
   push:
     branches: [scum-hub-migration]
