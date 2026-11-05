@@ -79,6 +79,11 @@ namespace ScumPositionProbe {
    foreach(var row in destinations)if(row.Marker!=null)Check(row.MetresAway.HasValue&&row.DistanceText.EndsWith(" м"),"every destination has metres, including distant categories");
    Check(ProbeForm.GroupNavigationMarkers(poi.Visible,viewer,500,320,320).FindAll(row=>row.Marker!=null&&!row.MetresAway.HasValue).Count==0,"all 77 POIs have distance");
    Check(localDestinations.FindAll(row=>row.Marker!=null&&row.MetresAway.HasValue).Count==0,"missing position does not invent distances");
+   var categoryRows=ProbeForm.GroupNavigationMarkers(poi.Visible,viewer,500,320,320);double previousDistance=-1;int groups=0;foreach(var row in categoryRows){if(row.Marker==null){previousDistance=-1;groups++;continue;}Check(row.MetresAway.HasValue&&row.MetresAway.Value>=previousDistance,"every category sorts nearest-first");previousDistance=row.MetresAway.Value;}Check(groups>=5,"all built-in categories sorted");
+   HubMarker lexicalFar=Goal(.7f,.5f);lexicalFar.Id="lexical-far";lexicalFar.Name="A Far";lexicalFar.Kind="base";HubMarker lexicalNear=Goal(.51f,.5f);lexicalNear.Id="lexical-near";lexicalNear.Name="Z Near";lexicalNear.Kind="base";
+   var pair=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{lexicalFar,lexicalNear},viewer,150,320,320);Check(pair[1].Marker.Id=="lexical-near"&&pair[2].Marker.Id=="lexical-far","distance takes priority over names");
+   pair=ProbeForm.GroupNavigationMarkers(new List<HubMarker>{lexicalFar,lexicalNear},null,150,320,320);Check(pair[1].Marker.Id=="lexical-far","offline without position retains deterministic name order");
+   Check(MapMath.RouteFooter("C1",null)=="C1"&&MapMath.RouteFooter("C1",200)=="200 м · C1"&&MapMath.RouteFooter("D4",2500)=="2500 м · D4"&&MapMath.RouteFooter("A0",0)=="0 м · A0","remaining route metres appear left of sector, including distances above one kilometre");
    results.Add("PASS visible-map destination shortcuts, nearest-first order, zoom, viewport corners, footer and movement");
    RoadGraph dry=WalkingFixture(false);PointF nearby=new PointF(.4f,.4f);RoadRoute walk=dry.Find(nearby,Goal(.41f,.4f),TravelMode.Foot);
    Check(walk.DirectFoot&&walk.Points.Length==2&&Math.Abs(walk.Remaining-RoadGeometry.Distance(nearby,walk.Target))<.1,"nearby marker avoids the road detour");

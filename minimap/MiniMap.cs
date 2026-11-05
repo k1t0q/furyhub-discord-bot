@@ -19,6 +19,7 @@ namespace ScumPositionProbe {
    double x=(marker.X-NormX(current.X))/span*size+size/2.0,y=(marker.Y-NormY(current.Y))/span*size+size/2.0;
    return x>=0&&x<=size&&y>=0&&y<=Math.Min(size,height-25);
   }
+  public static string RouteFooter(string sector,double? remaining){return remaining.HasValue?Math.Ceiling(Math.Max(0,remaining.Value)).ToString("0",CultureInfo.InvariantCulture)+" м · "+sector:sector;}
   public static string Sector(double x,double y){if(x<0||x>=1||y<0||y>=1)return "ВНЕ КАРТЫ";return "DCBAZ"[(int)(y*5)].ToString()+"43210"[(int)(x*5)];}
  }
  public sealed class MiniMapForm:Form {
@@ -96,7 +97,7 @@ namespace ScumPositionProbe {
    string sector=Current==null?"":MapMath.Sector(nx,ny);
    string status=age>3&&Current!=null?" · "+age.ToString("0")+" с назад":!NorthCalibrated?" · настрой север":"";
    if(SyncEnabled&&SyncStatus.StartsWith("HUB: нет связи",StringComparison.Ordinal))status+=" · HUB: нет связи";
-   string rightLabel=sector+(Navigation.Route==null?"":" · "+RoadGeometry.Metres(Navigation.Route.Remaining));
+   string rightLabel=MapMath.RouteFooter(sector,Navigation.Route==null?(double?)null:Navigation.Route.Remaining);
    using(Font f=new Font("Segoe UI",9,FontStyle.Bold)){
     using(SolidBrush b=new SolidBrush(Color.FromArgb(175,5,10,14)))g.FillRectangle(b,0,Height-25,Width,25);
     TextRenderer.DrawText(g,heading+status,f,new Rectangle(6,Height-21,Math.Max(1,Width-(int)g.MeasureString(rightLabel,f).Width-16),20),age>3&&Current!=null?Color.Orange:Color.White,TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine|TextFormatFlags.NoPadding);

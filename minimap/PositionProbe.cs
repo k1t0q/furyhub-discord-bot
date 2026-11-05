@@ -296,8 +296,6 @@ namespace ScumPositionProbe {
     Label count=CompactLabel(row,mini.Objects.Count(key).ToString(),386,14,68,26);count.TextAlign=ContentAlignment.MiddleRight;count.ForeColor=Color.FromArgb(145,160,171);
     box.CheckedChanged+=delegate{mini.Objects.SetEnabled(key,box.Checked);UpdateNavigationMarkers();mini.Invalidate();};
    }
-   CompactLabel(objectsPanel,"По умолчанию включены все категории.\r\nТвой выбор сохраняется после закрытия программы.",0,433,472,48).ForeColor=Color.FromArgb(145,160,171);
-   CompactLabel(objectsPanel,"В навигаторе расстояния указаны по прямой\r\nот последней полученной позиции.",0,500,472,48).ForeColor=Color.FromArgb(145,160,171);
   }
   void SaveUiPreview(string name,DarkComboBox open=null){if(Environment.OSVersion.Platform!=PlatformID.Win32NT)return;using(Bitmap image=new Bitmap(Width,Height)){DrawToBitmap(image,new Rectangle(0,0,Width,Height));if(open!=null)open.RenderOpenPopup(image);image.Save(name,System.Drawing.Imaging.ImageFormat.Png);}}
   static void PumpUi(int milliseconds){Stopwatch wait=Stopwatch.StartNew();while(wait.ElapsedMilliseconds<milliseconds){Application.DoEvents();System.Threading.Thread.Sleep(1);}}
@@ -380,11 +378,12 @@ namespace ScumPositionProbe {
   static int NavigationGroup(HubMarker marker){if(StaticPoiLayer.IsStatic(marker)){int index=Array.IndexOf(StaticPoiLayer.Categories,marker.Kind.Substring(4));return index<0?2:index+3;}return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
   internal static List<NavigationChoice> GroupNavigationMarkers(List<HubMarker> markers,Position current,double radius,int width,int height){
    string[] names={"СХРОНЫ","БАЗЫ","ДРУГОЕ","ПОЛИЦАЙКИ","БРЕНОРЫ","СЕКРЕТКИ","TEC1","WW2"};List<NavigationChoice> rows=new List<NavigationChoice>();
+   var distances=new Dictionary<HubMarker,double>();if(current!=null){PointF origin=RoadGeometry.FromPosition(current);foreach(HubMarker marker in markers)distances[marker]=RoadGeometry.Distance(origin,new PointF((float)marker.X,(float)marker.Y));}
    if(current!=null){PointF here=RoadGeometry.FromPosition(current);List<HubMarker> visible=markers.FindAll(m=>MapMath.MarkerInView(m,current,radius,width,height));
     visible.Sort((a,b)=>{int order=RoadGeometry.Distance(here,new PointF((float)a.X,(float)a.Y)).CompareTo(RoadGeometry.Distance(here,new PointF((float)b.X,(float)b.Y)));return order!=0?order:StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);});
     if(visible.Count>0){rows.Add(new NavigationChoice{Header="НА МИНИКАРТЕ"});foreach(HubMarker marker in visible)rows.Add(new NavigationChoice{Marker=marker,MetresAway=RoadGeometry.Distance(here,new PointF((float)marker.X,(float)marker.Y))});}
    }
-   for(int group=0;group<8;group++){List<HubMarker> sorted=markers.FindAll(m=>NavigationGroup(m)==group);if(sorted.Count==0)continue;sorted.Sort((a,b)=>{int n=StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);return n!=0?n:StringComparer.Ordinal.Compare(a.Id,b.Id);});rows.Add(new NavigationChoice{Header=names[group]});foreach(HubMarker marker in sorted)rows.Add(new NavigationChoice{Marker=marker,MetresAway=current==null?(double?)null:RoadGeometry.Distance(RoadGeometry.FromPosition(current),new PointF((float)marker.X,(float)marker.Y))});}
+   for(int group=0;group<8;group++){List<HubMarker> sorted=markers.FindAll(m=>NavigationGroup(m)==group);if(sorted.Count==0)continue;sorted.Sort((a,b)=>{if(current!=null){int d=distances[a].CompareTo(distances[b]);if(d!=0)return d;}int n=StringComparer.CurrentCultureIgnoreCase.Compare(a.Name,b.Name);return n!=0?n:StringComparer.Ordinal.Compare(a.Id,b.Id);});rows.Add(new NavigationChoice{Header=names[group]});foreach(HubMarker marker in sorted)rows.Add(new NavigationChoice{Marker=marker,MetresAway=current==null?(double?)null:distances[marker]});}
    return rows;
   }
   void NavigationSelectionChanged(){
