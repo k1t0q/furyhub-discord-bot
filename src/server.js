@@ -8,6 +8,7 @@ import http from 'node:http';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, copyFileSync } from 'node:fs';
+const minimapDownloadName='SCUM_HUB_MiniMap_V1.2.exe';
 const minimapPath=new URL('../minimap/SCUM_HUB_MiniMap.exe',import.meta.url);
 try{copyFileSync('/tmp/SCUM_HUB_MiniMap.exe',minimapPath);}catch{}
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
@@ -365,7 +366,7 @@ async function registerGlobalClear(){
 }
 async function handle(interaction) {
   if(interaction.type===InteractionType.MESSAGE_COMPONENT && interaction.data?.custom_id==='fury:menu' && interaction.data?.values?.[0]==='fury:minimap'){
-    try{const file=readFileSync(minimapPath);if(file.length<100000||file[0]!==77||file[1]!==90)throw Error('Invalid executable');const reply=ephem('🗺️ **Миникарта SCUM HUB · Windows**\nТвоя позиция, союзники и метки отряда поверх игры.\n\n**Как начать**\nСкачай файл ниже и запусти — установка не нужна. Введи ник и свой код HUB, подключись и нажми F8. Для отслеживания выбери клавишу, назначенную в SCUM на копирование координат.\n\n**Управление**\n↑ / ↓ — приблизить / отдалить в игре.\nF7 — показать / скрыть карту.\nF8 — старт / пауза.\nF9 — стоп.\nF11 — настроить север.\n\nКарта скрывается при переключении из игры в другие приложения. Включи «Скрывать карту при курсоре», чтобы она не мешала в инвентаре.\n\nМасштаб: 100, 300, 500, 700, 900 м и далее шаг 200 м. Радиус появляется в углу на 2 секунды.\nСоюзники: точные координаты без искусственного смещения, плавное движение, сетевой цикл 100 мс.\n\nv1.2');reply.data.minimapFile=file;return reply;}catch{return ephem('Файл миникарты временно недоступен. Сообщи администратору.');}
+    try{const file=readFileSync(minimapPath);if(file.length<100000||file[0]!==77||file[1]!==90)throw Error('Invalid executable');const reply=ephem('🗺️ **Миникарта SCUM HUB · Windows**\nТвоя позиция, союзники и метки отряда поверх игры.\n\n**Как начать**\nСкачай файл ниже и запусти — установка не нужна. Введи ник и свой код HUB, подключись и нажми F8. Для отслеживания выбери клавишу, назначенную в SCUM на копирование координат.\n\n**Управление**\n↑ / ↓ — приблизить / отдалить в игре.\nF7 — показать / скрыть карту.\nF8 — старт / пауза.\nF9 — стоп.\nF11 — настроить север.\n\nКарта скрывается при переключении из игры в другие приложения. Включи «Скрывать карту при курсоре», чтобы она не мешала в инвентаре.');reply.data.minimapFile=file;return reply;}catch{return ephem('Файл миникарты временно недоступен. Сообщи администратору.');}
   }
   if (interaction.type === InteractionType.PING) return { type: InteractionResponseType.PONG };
   if(interaction.type===InteractionType.APPLICATION_COMMAND&&interaction.data?.name==='clear'){
@@ -846,7 +847,7 @@ http.createServer(async (req, res) => {
         const url = 'https://discord.com/api/v10/webhooks/' + encodeURIComponent(appId) + '/' + encodeURIComponent(token) + '/messages/@original';
         const payload={content:data.content||'',embeds:data.embeds||[],components:data.components||[]};
         let body=JSON.stringify(payload),headers={'Content-Type':'application/json'};
-        if(data.minimapFile){payload.attachments=[{id:0,filename:'SCUM_HUB_MiniMap.exe'}];const form=new FormData();form.set('payload_json',JSON.stringify(payload));form.set('files[0]',new Blob([data.minimapFile],{type:'application/octet-stream'}),'SCUM_HUB_MiniMap.exe');body=form;headers={};}
+        if(data.minimapFile){payload.attachments=[{id:0,filename:minimapDownloadName}];const form=new FormData();form.set('payload_json',JSON.stringify(payload));form.set('files[0]',new Blob([data.minimapFile],{type:'application/octet-stream'}),minimapDownloadName);body=form;headers={};}
         const response = await fetch(url,{method:'PATCH',headers,body,signal:AbortSignal.timeout(data.minimapFile?60000:8000)});
         if (!response.ok) console.error('[discord] deferred response failed:', response.status);
       } catch (error) {
