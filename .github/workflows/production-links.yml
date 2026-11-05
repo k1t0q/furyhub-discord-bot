@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release v1.2: precise ally coordinates, 100ms updates and smooth rendering
+# Approved release v1.3: collapsible navigator categories with saved state
 on:
   push:
     branches: [scum-hub-migration]
@@ -45,4 +45,4 @@ jobs:
           scp -i ~/.ssh/migration_key -P "$PORT" minimap/SCUM_HUB_MiniMap.exe "$SSH_USER@$SSH_HOST:/tmp/SCUM_HUB_MiniMap.exe"
           ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; test -s /tmp/SCUM_HUB_MiniMap.exe; chmod 644 /tmp/SCUM_HUB_MiniMap.exe; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; curl -fsS --retry 5 --retry-delay 3 --max-time 30 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status; minimap_bot_dir=$(systemctl show scum-hub-bot -p WorkingDirectory --value); test -n "$minimap_bot_dir"; cmp /tmp/SCUM_HUB_MiniMap.exe "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"; sha256sum "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"'
 
-# Publish v1.2 after the bot code deployment has completed.
+# Publish v1.3 after the bot code deployment has completed.
