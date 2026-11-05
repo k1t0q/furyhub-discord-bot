@@ -45,6 +45,7 @@ namespace ScumPositionProbe {
   public readonly ItemCollection Items;int selected=-1;ToolStripDropDown popup;SelectorList list;bool ownerPressDismissed;long ownerDismissedAt;
   public string EmptyText="Выбери значение";
   public Predicate<object> IsSelectable=item=>true;
+  public Predicate<object> IsRowVisible=item=>true;public Action<object> ToggleHeader;
   public ComboBoxStyle DropDownStyle{get;set;}public DrawMode DrawMode{get;set;}public FlatStyle FlatStyle{get;set;}
   public bool IntegralHeight{get;set;}public int MaxDropDownItems{get;set;}public int ItemHeight{get;set;}public int DropDownHeight{get;set;}
   public int DropDownWidth{get{return Width;}set{}}
@@ -54,6 +55,9 @@ namespace ScumPositionProbe {
   public event EventHandler SelectedIndexChanged,DropDown;public event DrawItemEventHandler DrawItem;
   public DarkComboBox(){Items=new ItemCollection(this);SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw|ControlStyles.Selectable,true);TabStop=true;Cursor=Cursors.Hand;BackColor=Color.FromArgb(17,25,30);ForeColor=Color.FromArgb(237,241,243);ItemHeight=25;DropDownHeight=240;MaxDropDownItems=10;}
   public void RefreshRows(){Invalidate();if(list!=null&&!list.IsDisposed&&DroppedDown)list.Invalidate();}
+  public void RefreshRowVisibility(){if(list!=null&&!list.IsDisposed&&DroppedDown)list.RefreshVisibility();Invalidate();}
+  internal int VisibleRowCount{get{int count=0;foreach(object item in Items)if(IsRowVisible(item))count++;return count;}}
+  internal void TestToggleHeader(int index){if(list==null||!DroppedDown)throw new Exception("Open the selector first");list.TestToggleHeader(index);}
   public void BeginUpdate(){SuspendLayout();}public void EndUpdate(){ResumeLayout();Invalidate();}
   protected override void OnSizeChanged(EventArgs e){base.OnSizeChanged(e);RoundedUi.Clip(this,8);}
   protected override void OnEnabledChanged(EventArgs e){base.OnEnabledChanged(e);if(!Enabled)DroppedDown=false;Invalidate();}
@@ -61,7 +65,7 @@ namespace ScumPositionProbe {
   protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(Enabled&&e.Button==MouseButtons.Left){if(ownerPressDismissed){ownerPressDismissed=false;if(Stopwatch.GetTimestamp()-ownerDismissedAt<Stopwatch.Frequency/2)return;}Focus();DroppedDown=!DroppedDown;}}
   protected override bool IsInputKey(Keys key){return key==Keys.Up||key==Keys.Down||base.IsInputKey(key);}
   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.F4||e.KeyCode==Keys.Space||e.KeyCode==Keys.Enter||(e.Alt&&e.KeyCode==Keys.Down)){DroppedDown=!DroppedDown;e.Handled=true;}else if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){Step(e.KeyCode==Keys.Down?1:-1);e.Handled=true;}}
-  void Step(int direction){int i=SelectedIndex;do{i+=direction;}while(i>=0&&i<Items.Count&&!IsSelectable(Items[i]));if(i>=0&&i<Items.Count)SelectedIndex=i;}
+  void Step(int direction){int i=SelectedIndex;do{i+=direction;}while(i>=0&&i<Items.Count&&(!IsSelectable(Items[i])||!IsRowVisible(Items[i])));if(i>=0&&i<Items.Count)SelectedIndex=i;}
   internal void PaintRow(Graphics graphics,Rectangle bounds,int index,bool hot,bool closed){
    Color background=hot?Color.FromArgb(43,59,69):BackColor;using(SolidBrush brush=new SolidBrush(background))graphics.FillRectangle(brush,bounds);
    DrawItemState state=closed?DrawItemState.ComboBoxEdit:hot?DrawItemState.Selected:DrawItemState.None;
@@ -77,7 +81,7 @@ namespace ScumPositionProbe {
   void Open(){
    if(!Enabled||Items.Count==0)return;if(DropDown!=null)DropDown(this,EventArgs.Empty);if(!Enabled||Items.Count==0)return;
    if(popup!=null)popup.Dispose();popup=new RoundedPopup{AutoSize=false,Padding=Padding.Empty,Margin=Padding.Empty,BackColor=BackColor,DropShadowEnabled=false};
-   int height=Math.Min(DropDownHeight,Items.Count*ItemHeight+12);list=new SelectorList(this);list.Size=new Size(Width,height);
+   int height=Math.Min(DropDownHeight,VisibleRowCount*ItemHeight+12);list=new SelectorList(this);list.Size=new Size(Width,height);
    ToolStripControlHost host=new ToolStripControlHost(list){AutoSize=false,Size=list.Size,Margin=Padding.Empty,Padding=Padding.Empty};popup.Items.Add(host);popup.Size=list.Size;RoundedUi.Clip(popup,9);
    popup.Closing+=delegate(object sender,ToolStripDropDownClosingEventArgs e){if(e.CloseReason==ToolStripDropDownCloseReason.AppClicked&&RectangleToScreen(ClientRectangle).Contains(Cursor.Position)){ownerPressDismissed=true;ownerDismissedAt=Stopwatch.GetTimestamp();}};popup.Closed+=delegate{Invalidate();};popup.Show(this,new Point(0,Height+4));list.Focus();list.Invalidate();
   }
@@ -90,30 +94,33 @@ namespace ScumPositionProbe {
    protected override void OnPaint(PaintEventArgs e){}
   }
   sealed class SelectorList:Control {
-   readonly DarkComboBox owner;int offset,hot=-1;bool dragging;int dragY,dragOffset;readonly Dictionary<int,Bitmap> normalRows=new Dictionary<int,Bitmap>(),hotRows=new Dictionary<int,Bitmap>();readonly Dictionary<int,string> rowVersions=new Dictionary<int,string>();
+   readonly DarkComboBox owner;readonly List<int> visibleRows=new List<int>();int offset,hot=-1;bool dragging;int dragY,dragOffset;readonly Dictionary<int,Bitmap> normalRows=new Dictionary<int,Bitmap>(),hotRows=new Dictionary<int,Bitmap>();readonly Dictionary<int,string> rowVersions=new Dictionary<int,string>();
    Bitmap RowImage(int index,bool selected){string version=owner.Items[index].ToString(),prior;Bitmap stale;if(!rowVersions.TryGetValue(index,out prior)||prior!=version){if(normalRows.TryGetValue(index,out stale)){stale.Dispose();normalRows.Remove(index);}if(hotRows.TryGetValue(index,out stale)){stale.Dispose();hotRows.Remove(index);}rowVersions[index]=version;}Dictionary<int,Bitmap> cache=selected?hotRows:normalRows;Bitmap image;if(cache.TryGetValue(index,out image))return image;image=new Bitmap(Width-(Scrolls?18:8),owner.ItemHeight);using(Graphics graphics=Graphics.FromImage(image))owner.PaintRow(graphics,new Rectangle(0,0,image.Width,image.Height),index,selected,false);cache[index]=image;return image;}
    void RedrawNow(){Invalidate();}
    protected override void Dispose(bool disposing){if(disposing){foreach(Bitmap image in normalRows.Values)image.Dispose();foreach(Bitmap image in hotRows.Values)image.Dispose();}base.Dispose(disposing);}
-   int ContentHeight{get{return owner.Items.Count*owner.ItemHeight;}}int ViewHeight{get{return Height-12;}}bool Scrolls{get{return ContentHeight>ViewHeight;}}
-   public SelectorList(DarkComboBox owner){this.owner=owner;BackColor=owner.BackColor;ForeColor=owner.ForeColor;Font=owner.Font;TabStop=true;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable,true);}
+   internal void RefreshVisibility(){int anchor=hot>=0?hot:owner.SelectedIndex;int slot=visibleRows.IndexOf(anchor),y=slot<0?0:slot*owner.ItemHeight-offset;visibleRows.Clear();for(int i=0;i<owner.Items.Count;i++)if(owner.IsRowVisible(owner.Items[i]))visibleRows.Add(i);int next=visibleRows.IndexOf(anchor);if(next>=0)offset=next*owner.ItemHeight-y;offset=Math.Max(0,Math.Min(Math.Max(0,ContentHeight-ViewHeight),offset));hot=-1;foreach(Bitmap image in normalRows.Values)image.Dispose();foreach(Bitmap image in hotRows.Values)image.Dispose();normalRows.Clear();hotRows.Clear();rowVersions.Clear();Invalidate();}
+   int ContentHeight{get{return visibleRows.Count*owner.ItemHeight;}}int ViewHeight{get{return Height-12;}}bool Scrolls{get{return ContentHeight>ViewHeight;}}
+   public SelectorList(DarkComboBox owner){this.owner=owner;for(int i=0;i<owner.Items.Count;i++)if(owner.IsRowVisible(owner.Items[i]))visibleRows.Add(i);BackColor=owner.BackColor;ForeColor=owner.ForeColor;Font=owner.Font;TabStop=true;SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable,true);}
    Rectangle Thumb(){int track=Height-16;int h=Math.Max(24,track*ViewHeight/Math.Max(1,ContentHeight));return new Rectangle(Width-9,8+(track-h)*offset/Math.Max(1,ContentHeight-ViewHeight),4,h);}
-   int Row(int y){return (y-6+offset)/owner.ItemHeight;}
+   int Row(int y){int slot=(y-6+offset)/owner.ItemHeight;return y<6||slot<0||slot>=visibleRows.Count?-1:visibleRows[slot];}
    void Scroll(int amount){int next=Math.Max(0,Math.Min(Math.Max(0,ContentHeight-ViewHeight),offset+amount));if(next==offset)return;offset=next;Point mouse=PointToClient(Cursor.Position);hot=ClientRectangle.Contains(mouse)?Row(mouse.Y):-1;RedrawNow();}
-   protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(BackColor);for(int i=Math.Max(0,offset/owner.ItemHeight);i<owner.Items.Count;i++){int y=6+i*owner.ItemHeight-offset;if(y>=Height-6)break;if(y+owner.ItemHeight>=e.ClipRectangle.Top&&y<=e.ClipRectangle.Bottom)e.Graphics.DrawImageUnscaled(RowImage(i,i==hot),4,y);}e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;if(Scrolls)using(SolidBrush brush=new SolidBrush(Color.FromArgb(90,108,119)))e.Graphics.FillRectangle(brush,Thumb());using(GraphicsPath path=RoundedUi.Path(new RectangleF(.5f,.5f,Width-1,Height-1),9))using(Pen pen=new Pen(Color.FromArgb(65,82,94)))e.Graphics.DrawPath(pen,path);}
+   protected override void OnPaint(PaintEventArgs e){e.Graphics.Clear(BackColor);for(int slot=Math.Max(0,offset/owner.ItemHeight);slot<visibleRows.Count;slot++){int i=visibleRows[slot],y=6+slot*owner.ItemHeight-offset;if(y>=Height-6)break;if(y+owner.ItemHeight>=e.ClipRectangle.Top&&y<=e.ClipRectangle.Bottom)e.Graphics.DrawImageUnscaled(RowImage(i,i==hot),4,y);}e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;if(Scrolls)using(SolidBrush brush=new SolidBrush(Color.FromArgb(90,108,119)))e.Graphics.FillRectangle(brush,Thumb());using(GraphicsPath path=RoundedUi.Path(new RectangleF(.5f,.5f,Width-1,Height-1),9))using(Pen pen=new Pen(Color.FromArgb(65,82,94)))e.Graphics.DrawPath(pen,path);}
    internal void TestRowRefresh(Action change){int index=0;while(index<owner.Items.Count&&!owner.IsSelectable(owner.Items[index]))index++;if(index>=owner.Items.Count)throw new Exception("No row for cache refresh test");Bitmap before=RowImage(index,false);string text=owner.Items[index].ToString();change();Bitmap after=RowImage(index,false);if(Object.ReferenceEquals(before,after)||text==owner.Items[index].ToString())throw new Exception("Cached popup distance was not repainted");}
+   internal void TestToggleHeader(int index){int slot=visibleRows.IndexOf(index);if(slot<0)throw new Exception("Header is hidden");offset=Math.Max(0,Math.Min(Math.Max(0,ContentHeight-ViewHeight),slot*owner.ItemHeight));int y=6+slot*owner.ItemHeight-offset+owner.ItemHeight/2;int selected=owner.SelectedIndex;OnMouseDown(new MouseEventArgs(MouseButtons.Left,1,20,y,0));if(!owner.DroppedDown||selected!=owner.SelectedIndex)throw new Exception("Collapsing a header changed the selected destination or closed the list");}
    internal void TestScrollBurst(){
+    Scroll(-offset);
     int expected=Math.Min(ContentHeight-ViewHeight,owner.ItemHeight*3);OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,20,30,-120));if(offset!=expected)throw new Exception("Wheel input waited for a timer instead of updating immediately");
     for(int i=0;i<100;i++)OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,20,30,-120));if(offset!=ContentHeight-ViewHeight)throw new Exception("Fast scroll burst lost input or overshot the bottom");
     for(int i=0;i<100;i++)OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,20,30,120));if(offset!=0)throw new Exception("Reverse scroll burst did not return to the top");
     OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,20,30,-30));if(offset<=0)throw new Exception("High-resolution wheel delta was discarded");Scroll(-offset);
    }
    protected override void OnMouseWheel(MouseEventArgs e){base.OnMouseWheel(e);Scroll((int)Math.Round(-e.Delta*owner.ItemHeight*3/120.0));}
-   protected override void OnMouseMove(MouseEventArgs e){base.OnMouseMove(e);if(dragging){int track=Math.Max(1,Height-16-Thumb().Height);int next=Math.Max(0,Math.Min(ContentHeight-ViewHeight,dragOffset+(e.Y-dragY)*(ContentHeight-ViewHeight)/track));if(next!=offset){offset=next;RedrawNow();}}else{int next=e.Y<6||e.Y>=Height-6?-1:Row(e.Y);if(next!=hot){int previous=hot;hot=next;if(previous>=0)Invalidate(new Rectangle(4,6+previous*owner.ItemHeight-offset,Width-18,owner.ItemHeight));if(hot>=0)Invalidate(new Rectangle(4,6+hot*owner.ItemHeight-offset,Width-18,owner.ItemHeight));}}}
+   protected override void OnMouseMove(MouseEventArgs e){base.OnMouseMove(e);if(dragging){int track=Math.Max(1,Height-16-Thumb().Height);int next=Math.Max(0,Math.Min(ContentHeight-ViewHeight,dragOffset+(e.Y-dragY)*(ContentHeight-ViewHeight)/track));if(next!=offset){offset=next;RedrawNow();}}else{int next=e.Y<6||e.Y>=Height-6?-1:Row(e.Y);if(next!=hot){hot=next;Invalidate();}}}
    protected override void OnMouseLeave(EventArgs e){base.OnMouseLeave(e);hot=-1;Invalidate();}
-   protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;if(Scrolls&&e.X>=Width-16){if(Thumb().Contains(e.Location)){dragging=true;dragY=e.Y;dragOffset=offset;Capture=true;}else Scroll(e.Y<Thumb().Top?-ViewHeight:ViewHeight);return;}int i=Row(e.Y);if(e.Y>=6&&i>=0&&i<owner.Items.Count&&owner.IsSelectable(owner.Items[i])){owner.SelectedIndex=i;owner.DroppedDown=false;owner.Focus();}}
+   protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;if(Scrolls&&e.X>=Width-16){if(Thumb().Contains(e.Location)){dragging=true;dragY=e.Y;dragOffset=offset;Capture=true;}else Scroll(e.Y<Thumb().Top?-ViewHeight:ViewHeight);return;}int i=Row(e.Y);if(e.Y>=6&&i>=0&&i<owner.Items.Count){if(!owner.IsSelectable(owner.Items[i])){if(owner.ToggleHeader!=null){hot=i;owner.ToggleHeader(owner.Items[i]);}return;}owner.SelectedIndex=i;owner.DroppedDown=false;owner.Focus();}}
    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);dragging=false;Capture=false;}
    protected override bool IsInputKey(Keys key){return key==Keys.Up||key==Keys.Down||key==Keys.Home||key==Keys.End||base.IsInputKey(key);}
-   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.Escape||e.KeyCode==Keys.Enter){owner.DroppedDown=false;owner.Focus();e.Handled=true;return;}if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){owner.Step(e.KeyCode==Keys.Down?1:-1);int top=owner.SelectedIndex*owner.ItemHeight;if(top<offset)offset=top;if(top+owner.ItemHeight>offset+ViewHeight)offset=top+owner.ItemHeight-ViewHeight;hot=owner.SelectedIndex;RedrawNow();e.Handled=true;}}
+   protected override void OnKeyDown(KeyEventArgs e){base.OnKeyDown(e);if(e.KeyCode==Keys.Escape||e.KeyCode==Keys.Enter){owner.DroppedDown=false;owner.Focus();e.Handled=true;return;}if(e.KeyCode==Keys.Up||e.KeyCode==Keys.Down){owner.Step(e.KeyCode==Keys.Down?1:-1);int top=Math.Max(0,visibleRows.IndexOf(owner.SelectedIndex))*owner.ItemHeight;if(top<offset)offset=top;if(top+owner.ItemHeight>offset+ViewHeight)offset=top+owner.ItemHeight-ViewHeight;hot=owner.SelectedIndex;RedrawNow();e.Handled=true;}}
   }
  }
  public sealed class DarkNumericButtons:NativeWindow {
@@ -332,6 +339,13 @@ namespace ScumPositionProbe {
    hubNick.Text="k1t0";hubState.Text="Союзники: подключено · 150 мс";hub=new HubClient();UpdateConnectionLayout();homeTab.PerformClick();Application.DoEvents();if(loginPanel.Visible||!connectedPanel.Visible||hubCode.Visible||!hubState.Visible)throw new Exception("Connected login collapse incorrect");
    mini.SetPosition(new Position{X=-445230,Y=297444});
    for(int i=0;i<30;i++)mini.Markers.Add(new HubMarker{Id="ui-test-"+i,Name=i==0?"Схрон на депо, пока почти пустой":"Схрон с припасами "+(i+1).ToString("00"),Kind="stash",X=.5,Y=.5});RebuildNavigationChoices();SaveUiPreview("ui-preview-home.png");navigationGoal.DroppedDown=true;Application.DoEvents();if(!navigationGoal.Enabled||!navigationGoal.DroppedDown||navigationGoal.DropDownWidth!=navigationGoal.Width||navigationGoal.DropDownHeight>240)throw new Exception("Destination popup geometry/state incorrect");NavigationChoice stable=(NavigationChoice)navigationGoal.SelectedItem;int stableIndex=navigationGoal.SelectedIndex;double beforeDistance=stable.MetresAway.Value;navigationGoal.TestRowRefresh(delegate{mini.SetPosition(new Position{X=-440230,Y=297444});RefreshNavigationDistances();});if(!navigationGoal.DroppedDown||navigationGoal.SelectedIndex!=stableIndex||!Object.ReferenceEquals(stable,navigationGoal.SelectedItem)||Math.Abs(stable.MetresAway.Value-beforeDistance)<1)throw new Exception("Distance refresh rebuilt or changed popup selection");mini.SetPosition(new Position{X=-445230,Y=297444});RefreshNavigationDistances();
+   int collapseHeader=-1;for(int i=0;i<navigationGoal.Items.Count;i++){NavigationChoice row=(NavigationChoice)navigationGoal.Items[i];if(row.Marker==null&&row.Header=="ПОЛИЦАЙКИ"){collapseHeader=i;break;}}
+   if(collapseHeader<0)throw new Exception("Police group missing");int expandedRows=navigationGoal.VisibleRowCount;navigationGoal.TestToggleHeader(collapseHeader);if(!collapsedNavigationGroups.Contains("ПОЛИЦАЙКИ")||navigationGoal.VisibleRowCount>=expandedRows)throw new Exception("Group did not collapse");SaveUiPreview("ui-preview-collapsed-categories.png",navigationGoal);navigationGoal.TestToggleHeader(collapseHeader);if(collapsedNavigationGroups.Contains("ПОЛИЦАЙКИ")||navigationGoal.VisibleRowCount!=expandedRows)throw new Exception("Group did not expand");
+   int headers=0;string selectedBeforeCollapse=((NavigationChoice)navigationGoal.SelectedItem).Marker.Id;for(int i=0;i<navigationGoal.Items.Count;i++){NavigationChoice row=(NavigationChoice)navigationGoal.Items[i];if(row.Marker==null){headers++;navigationGoal.TestToggleHeader(i);}}
+   if(navigationGoal.VisibleRowCount!=headers||File.ReadAllLines(UserSettings.PathFor("navigation-groups.txt")).Length!=headers)throw new Exception("Not all groups collapsed or persisted");navigationGoal.DroppedDown=false;navigationGoal.DroppedDown=true;Application.DoEvents();if(navigationGoal.VisibleRowCount!=headers||((NavigationChoice)navigationGoal.SelectedItem).Marker.Id!=selectedBeforeCollapse)throw new Exception("Collapsed groups or destination lost on reopen");SaveUiPreview("ui-preview-all-categories-collapsed.png",navigationGoal);
+   for(int i=0;i<navigationGoal.Items.Count;i++)if(((NavigationChoice)navigationGoal.Items[i]).Marker==null)navigationGoal.TestToggleHeader(i);
+   if(collapsedNavigationGroups.Count!=0)throw new Exception("Group expansion did not restore list");
+   Console.WriteLine("PASS navigator header clicks collapse and expand without closing the popup or changing destination");
    SaveUiPreview("ui-preview-list.png",navigationGoal);navigationGoal.TestScrollInput();navigationGoal.DroppedDown=false;mini.Markers.Clear();RebuildNavigationChoices();navigationGoal.DroppedDown=true;Application.DoEvents();SaveUiPreview("ui-preview-poi-navigation.png",navigationGoal);navigationGoal.DroppedDown=false;
    for(int i=0;i<navigationGoal.Items.Count;i++){NavigationChoice row=(NavigationChoice)navigationGoal.Items[i];if(row.Marker!=null&&row.Marker.Kind=="poi_secret_bunker"){navigationGoal.SelectedIndex=i;break;}}Activate();PumpUi(100);navigationGoal.DroppedDown=true;PumpUi(100);if(!navigationGoal.DroppedDown)throw new Exception("POI category popup did not reopen");SaveUiPreview("ui-preview-bunker-navigation.png",navigationGoal);navigationGoal.DroppedDown=false;
    DisconnectHub();Application.DoEvents();if(!loginPanel.Visible||connectedPanel.Visible||!hubCode.Visible)throw new Exception("Disconnect did not restore login");
@@ -369,11 +383,13 @@ namespace ScumPositionProbe {
   }
   readonly DarkComboBox navigationMode=new DarkComboBox();readonly DarkComboBox navigationGoal=new DarkComboBox();readonly Button navigationStart=new RoundedButton(),navigationCancel=new RoundedButton(),stashRefresh=new RoundedButton();bool refreshingStash;readonly Label navigationState=new Label();
   internal sealed class NavigationChoice {
-   public HubMarker Marker;public string Header;public double? MetresAway;
-   public string DisplayName{get{return Marker==null?Header:StaticPoiLayer.IsStatic(Marker)?Marker.Name:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y);}}
+   public HubMarker Marker;public string Header,Group;public bool Collapsed;public double? MetresAway;
+   public string DisplayName{get{return Marker==null?(Collapsed?"▸ ":"▾ ")+Header:StaticPoiLayer.IsStatic(Marker)?Marker.Name:Marker.Name+" · "+MapMath.Sector(Marker.X,Marker.Y);}}
    public string DistanceText{get{return MetresAway.HasValue?Math.Ceiling(Math.Max(0,MetresAway.Value)).ToString("N0",CultureInfo.GetCultureInfo("ru-RU"))+" м":"—";}}
-   public override string ToString(){return Marker==null?Header:DisplayName+" · "+DistanceText;}
+   public override string ToString(){return Marker==null?DisplayName:DisplayName+" · "+DistanceText;}
   }
+  readonly HashSet<string> collapsedNavigationGroups=new HashSet<string>(StringComparer.Ordinal);
+  void ToggleNavigationGroup(object value){NavigationChoice header=value as NavigationChoice;if(header==null||header.Marker!=null)return;if(!collapsedNavigationGroups.Add(header.Header))collapsedNavigationGroups.Remove(header.Header);foreach(NavigationChoice row in navigationGoal.Items)if(row.Marker==null)row.Collapsed=collapsedNavigationGroups.Contains(row.Header);navigationGoal.RefreshRowVisibility();try{File.WriteAllLines(UserSettings.PathFor("navigation-groups.txt"),new List<string>(collapsedNavigationGroups).ToArray());}catch{}}
   bool navigationListUpdating;int lastNavigationIndex=-1;
   static int NavigationGroup(HubMarker marker){if(StaticPoiLayer.IsStatic(marker)){int index=Array.IndexOf(StaticPoiLayer.Categories,marker.Kind.Substring(4));return index<0?2:index+3;}return String.Equals(marker.Kind,"stash",StringComparison.OrdinalIgnoreCase)?0:String.Equals(marker.Kind,"base",StringComparison.OrdinalIgnoreCase)?1:2;}
   internal static List<NavigationChoice> GroupNavigationMarkers(List<HubMarker> markers,Position current,double radius,int width,int height){
@@ -406,6 +422,9 @@ namespace ScumPositionProbe {
    if(!header)e.DrawFocusRectangle();
   }
   void BuildNavigationUI(){
+   try{foreach(string name in File.ReadAllLines(UserSettings.PathFor("navigation-groups.txt")))if(name.Length>0&&name.Length<100)collapsedNavigationGroups.Add(name);}catch{}
+   navigationGoal.IsRowVisible=item=>{NavigationChoice row=(NavigationChoice)item;return row.Marker==null||!collapsedNavigationGroups.Contains(row.Group??"");};navigationGoal.ToggleHeader=ToggleNavigationGroup;
+
    ClientSize=new Size(700,720);MinimumSize=MaximumSize=new Size(716,759);state.Top=674;
    MakeLabel("НАВИГАТОР",24,549,145,22,10,true);
    navigationMode.SetBounds(172,546,163,25);navigationMode.DropDownStyle=ComboBoxStyle.DropDownList;navigationMode.Items.AddRange(new object[]{"На машине","Пешком"});navigationMode.SelectedIndex=0;Controls.Add(navigationMode);
@@ -449,7 +468,7 @@ namespace ScumPositionProbe {
   void UpdateNavigationState(){navigationGoal.Enabled=navigationGoal.Items.Count>0;((DarkComboBox)navigationGoal).EmptyText=hub==null?"Подключись к HUB, чтобы выбрать метку":"Нет доступных меток";navigationGoal.Invalidate();navigationState.Text=mini.Navigation.Status;NavigationChoice selected=navigationGoal.SelectedItem as NavigationChoice;navigationStart.Enabled=selected!=null&&selected.Marker!=null&&!mini.Navigation.Busy;navigationCancel.Enabled=mini.Navigation.Route!=null||mini.Navigation.Busy;stashRefresh.Enabled=hub!=null&&!refreshingStash;}
   void RebuildNavigationChoices(){
    NavigationChoice previousChoice=navigationGoal.SelectedItem as NavigationChoice;string selected=previousChoice==null||previousChoice.Marker==null?null:previousChoice.Marker.Id;
-   navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;foreach(NavigationChoice row in GroupNavigationMarkers(mini.NavigationMarkers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
+   navigationListUpdating=true;navigationGoal.BeginUpdate();try{navigationGoal.Items.Clear();int first=-1;string group=null;foreach(NavigationChoice row in GroupNavigationMarkers(mini.NavigationMarkers,mini.Current,mini.ViewRadius,mini.ClientSize.Width,mini.ClientSize.Height)){if(row.Marker==null){group=row.Header;row.Collapsed=collapsedNavigationGroups.Contains(group);}row.Group=group;int i=navigationGoal.Items.Add(row);if(row.Marker!=null){if(first<0)first=i;if(row.Marker.Id==selected&&navigationGoal.SelectedIndex<0)navigationGoal.SelectedIndex=i;}}
     if(navigationGoal.SelectedIndex<0&&first>=0)navigationGoal.SelectedIndex=first;lastNavigationIndex=navigationGoal.SelectedIndex;
    }finally{navigationGoal.EndUpdate();navigationListUpdating=false;}
    UpdateNavigationState();
