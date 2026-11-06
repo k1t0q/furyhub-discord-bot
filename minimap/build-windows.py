@@ -25,5 +25,5 @@ for name in ['mscorlib', 'System', 'System.Core', 'System.Drawing', 'System.Wind
     args.append('-r:' + str(refs / (name + '.dll')))
 for name in ['SH.ico', 'map.jpg', 'roads.bin', 'NAVIGATION-NOTICES.txt', 'CREDITS.txt', 'static-poi.json']:
     args.append('-resource:' + name + ',ScumPositionProbe.' + name)
-args.extend(['PositionProbe.cs', 'HubClient.cs', 'MiniMap.cs', 'MarkerMergeTests.cs', 'KeyCapture.cs', 'AllyLive.cs', 'RoadNavigation.cs', 'NavigationTests.cs', 'StaticPoi.cs'])
+args.extend(['PositionProbe.cs', 'HubClient.cs', 'MiniMap.cs', 'MarkerMergeTests.cs', 'KeyCapture.cs', 'AllyLive.cs', 'AllyTransportTests.cs', 'RoadNavigation.cs', 'NavigationTests.cs', 'StaticPoi.cs'])
 subprocess.run(args, cwd=ROOT, check=True)
