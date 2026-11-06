@@ -1,0 +1,71 @@
+name: Build and verify mini-map V1.5 network recovery
+on:
+  push:
+    branches: [fix/minimap-flow-v1.5]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run transport and application tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil python3-numpy python3-scipy fonts-dejavu-core xvfb libgdiplus
+          python3 minimap/build-map.py
+          python3 minimap/build-road-graph.py
+          python3 minimap/build-windows.py
+          cd minimap
+          mono SCUM_HUB_MiniMap.exe --self-test
+          xvfb-run -a mono SCUM_HUB_MiniMap.exe --ui-test
+          cp SCUM_HUB_MiniMap.exe SCUM_HUB_MiniMap_V1.5.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SCUM_HUB_MiniMap_V1.5
+          path: minimap/SCUM_HUB_MiniMap_V1.5.exe
+  windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SCUM_HUB_MiniMap_V1.5
+      - name: Test native Windows UI
+        shell: pwsh
+        run: |
+          $taskProcess = Start-Process -FilePath ./SCUM_HUB_MiniMap_V1.5.exe -ArgumentList '--ui-test' -Wait -PassThru
+          Get-Content ui-test.txt
+          if ($taskProcess.ExitCode -ne 0) { exit $taskProcess.ExitCode }
+      - name: Test real Windows transport with stalled and oversized frames
+        shell: pwsh
+        run: |
+          python -m pip install websockets==15.0.1
+          $probeProcess = Start-Process python -ArgumentList 'minimap/network-probe.py' -PassThru -RedirectStandardOutput probe-output.txt -RedirectStandardError probe-error.txt
+          try {
+            $ready = $false
+            for ($probeAttempt=0; $probeAttempt -lt 30; $probeAttempt++) {
+              if ((Test-Path probe-output.txt) -and ((Get-Content probe-output.txt -Raw) -match 'READY')) { $ready=$true; break }
+              Start-Sleep -Milliseconds 200
+            }
+            if (!$ready) { Get-Content probe-error.txt; throw 'Local network probe did not start' }
+            $env:SCUM_NETWORK_PROBE='ws://127.0.0.1:8769/?test=1'
+            $taskProcess = Start-Process -FilePath ./SCUM_HUB_MiniMap_V1.5.exe -ArgumentList '--self-test' -Wait -PassThru
+            Get-Content self-test.txt
+            if (Test-Path network-test.txt) { Get-Content network-test.txt }
+            if ($taskProcess.ExitCode -ne 0) { exit $taskProcess.ExitCode }
+          } finally { Stop-Process -Id $probeProcess.Id -ErrorAction SilentlyContinue }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: minimap-v1.5-test-results
+          path: |
+            self-test.txt
+            network-test.txt
+            ui-test.txt
+            ui-preview-*.png
+            probe-error.txt

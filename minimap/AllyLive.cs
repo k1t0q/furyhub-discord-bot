@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.WebSockets;
@@ -31,7 +32,7 @@ namespace ScumPositionProbe {
  // Track application replies separately from successful writes to the local socket.
  internal sealed class AllyLinkHealth {
   readonly object gate=new object();long sent,ack,pendingSince,lastReply;bool acknowledgedProtocol;
-  internal const int TimeoutMs=2500;
+  internal const int TimeoutMs=8000;
   public void Reset(long now){lock(gate){sent=ack=pendingSince=0;lastReply=now;acknowledgedProtocol=false;}}
   public void Sent(long seq,long now){lock(gate){sent=Math.Max(sent,seq);if(sent>ack&&pendingSince==0)pendingSince=now;}}
   public void Reply(long now,long? accepted){lock(gate){lastReply=now;if(accepted.HasValue){acknowledgedProtocol=true;if(accepted.Value>ack){ack=accepted.Value;pendingSince=sent>ack?now:0;}}}}
@@ -50,13 +51,14 @@ namespace ScumPositionProbe {
   readonly AllyLinkHealth health=new AllyLinkHealth();
   internal Func<Uri> SocketUri=()=>new Uri("wss://scum-hub.ru/api/minimap/live");
   void AddReport(string kind,object server){
-   long now=MonotonicMs();var data=new Dictionary<string,object>{{"build","flow-2"},{"time",DateTime.UtcNow.ToString("o")},{"kind",kind},{"samples",Interlocked.Read(ref sampleCount)},{"positionsSent",Interlocked.Read(ref positionSent)},{"acknowledgedRevision",health.Acknowledged},{"pendingAckMs",health.PendingAge(now)},{"frames",Interlocked.Read(ref receivedCount)},{"reconnects",Interlocked.Read(ref reconnectCount)},{"sampleAgeMs",Interlocked.Read(ref lastSampleTick)==0?-1:now-Interlocked.Read(ref lastSampleTick)},{"frameAgeMs",Interlocked.Read(ref lastReceivedTick)==0?-1:now-Interlocked.Read(ref lastReceivedTick)},{"maxFrameGapMs",Interlocked.Read(ref maxFrameGap)},{"sharing",Sharing},{"sendingAllowed",SendingAllowed},{"failure",lastFailure}};
+   long now=MonotonicMs();var data=new Dictionary<string,object>{{"build","flow-3"},{"time",DateTime.UtcNow.ToString("o")},{"kind",kind},{"samples",Interlocked.Read(ref sampleCount)},{"positionsSent",Interlocked.Read(ref positionSent)},{"acknowledgedRevision",health.Acknowledged},{"pendingAckMs",health.PendingAge(now)},{"frames",Interlocked.Read(ref receivedCount)},{"reconnects",Interlocked.Read(ref reconnectCount)},{"sampleAgeMs",Interlocked.Read(ref lastSampleTick)==0?-1:now-Interlocked.Read(ref lastSampleTick)},{"frameAgeMs",Interlocked.Read(ref lastReceivedTick)==0?-1:now-Interlocked.Read(ref lastReceivedTick)},{"maxFrameGapMs",Interlocked.Read(ref maxFrameGap)},{"sharing",Sharing},{"sendingAllowed",SendingAllowed},{"failure",lastFailure}};
    if(server!=null)data["server"]=server;
    lock(reportGate){data["peers"]=new List<Dictionary<string,object>>(peerFlow.Values);reports.Enqueue(new JavaScriptSerializer().Serialize(data));while(reports.Count>240)reports.Dequeue();}
   }
-  public string DiagnosticReport(){AddReport("export",null);lock(reportGate)return "SCUM HUB network report flow-2\r\nNo coordinates, account codes or session cookies are included.\r\n"+String.Join("\r\n",reports.ToArray());}
+  public string DiagnosticReport(){AddReport("export",null);lock(reportGate)return "SCUM HUB network report flow-3\r\nNo coordinates, account codes or session cookies are included.\r\n"+String.Join("\r\n",reports.ToArray());}
   internal bool HandleFlowFrame(Dictionary<string,object> root){
    long now=MonotonicMs();object raw;
+   if(root==null)return false;
    if(root.TryGetValue("diagnostic",out raw)&&raw is bool&&(bool)raw){
     var safe=new List<Dictionary<string,object>>();object connections;
     if(root.TryGetValue("connections",out connections)&&connections is object[])foreach(object row in (object[])connections){var original=row as Dictionary<string,object>;if(original==null)continue;var clean=new Dictionary<string,object>();foreach(string key in new string[]{"nick","active","received","rejected","lastPacketAge","positionAge","reason"})if(original.TryGetValue(key,out raw))clean[key]=raw;
@@ -89,14 +91,14 @@ namespace ScumPositionProbe {
     Interlocked.Increment(ref reconnectCount);nextDiagnostic=0;socket=ws;if(cookies!=null)ws.Options.Cookies=cookies;ws.Options.SetRequestHeader("Origin","https://scum-hub.ru");
     using(var connect=CancellationTokenSource.CreateLinkedTokenSource(cancel.Token)){connect.CancelAfter(10000);await ws.ConnectAsync(SocketUri(),connect.Token);}
     Report("Союзники: проверяю связь…");connectionConfirmed=false;health.Reset(MonotonicMs());lock(gate){sentRevision=0;}Interlocked.Exchange(ref lastReceivedTick,MonotonicMs());
-    receive=Receive(ws);bool wasSharing=true;long renew=MonotonicMs()+240000,lastHeartbeat=MonotonicMs(),nextFlow=MonotonicMs()+1000;
+    receive=Receive(ws);bool wasSharing=true;long renew=MonotonicMs()+240000,lastHeartbeat=MonotonicMs(),nextFlow=MonotonicMs()+1000,lastPositionSend=0;
     while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested&&MonotonicMs()<renew){
      if(receive.IsCompleted){await receive;break;}
      if(health.TimedOut(MonotonicMs()))throw new TimeoutException("Ally delivery acknowledgement timed out");
      string packet=null;long sendingRevision=0;
-     if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&revision!=sentRevision&&(DateTime.UtcNow-observed).TotalMilliseconds<300){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["seq"]=sendingRevision;d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}
+     if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&((revision!=sentRevision&&(DateTime.UtcNow-observed).TotalMilliseconds<300)||(sentRevision>health.Acknowledged&&MonotonicMs()-lastPositionSend>=750))){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["seq"]=sendingRevision;d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}
      wasSharing=Sharing;
-     if(packet!=null){await Send(ws,packet);if(sendingRevision>0){health.Sent(sendingRevision,MonotonicMs());Interlocked.Increment(ref positionSent);lock(gate){sentRevision=sendingRevision;}}}
+     if(packet!=null){await Send(ws,packet);if(sendingRevision>0){lastPositionSend=MonotonicMs();health.Sent(sendingRevision,lastPositionSend);Interlocked.Increment(ref positionSent);lock(gate){sentRevision=sendingRevision;}}}
      if(MonotonicMs()-lastHeartbeat>=HeartbeatMs){await Send(ws,"{\"ping\":true}");lastHeartbeat=MonotonicMs();}
      if(MonotonicMs()>=nextFlow){nextFlow=MonotonicMs()+5000;diagnosticAsked=MonotonicMs();AddReport("request",null);await Send(ws,"{\"diagnostic\":true}");}
      await Task.Delay(100,cancel.Token);
@@ -107,10 +109,33 @@ namespace ScumPositionProbe {
    finally{if(ws!=null){ws.Abort();ws.Dispose();}if(receive!=null){try{await receive;}catch{}}socket=null;}
    try{await Task.Delay(250,cancel.Token);}catch{break;}
   }}
-  async Task Receive(ClientWebSocket ws){byte[] bytes=new byte[65536];while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested){int length=0;WebSocketReceiveResult part;do{part=await ws.ReceiveAsync(new ArraySegment<byte>(bytes,length,bytes.Length-length),cancel.Token);if(part.MessageType==WebSocketMessageType.Close)throw new WebSocketException("Remote close "+part.CloseStatus+": "+part.CloseStatusDescription);length+=part.Count;if(length==bytes.Length&&!part.EndOfMessage)throw new Exception("Packet too large");}while(!part.EndOfMessage);
-   string payload=Encoding.UTF8.GetString(bytes,0,length);long tick=MonotonicMs();Interlocked.Exchange(ref lastReceivedTick,tick);var root=new JavaScriptSerializer().DeserializeObject(payload) as Dictionary<string,object>;object accepted;health.Reply(tick,root!=null&&root.TryGetValue("ack",out accepted)?(long?)Convert.ToInt64(accepted):null);if(HandleFlowFrame(root))continue;
+  internal const int MaxMessageBytes=262144;
+  // WebSocket fragments are accumulated by message, not forced into a 64KB buffer.
+  // Oversized diagnostics are drained and skipped so the next position stays aligned.
+  internal static async Task<string> ReadMessage(WebSocket ws,CancellationToken token,Action<int> oversized){
+   byte[] chunk=new byte[8192];int total=0;bool tooLarge=false;
+   using(var body=new MemoryStream()){
+    WebSocketReceiveResult part;
+    do{
+     part=await ws.ReceiveAsync(new ArraySegment<byte>(chunk),token);
+     if(part.MessageType==WebSocketMessageType.Close)throw new WebSocketException("Remote close "+part.CloseStatus+": "+part.CloseStatusDescription);
+     if(part.MessageType!=WebSocketMessageType.Text)throw new FormatException("Unexpected ally message type");
+     total=(int)Math.Min(Int32.MaxValue,(long)total+part.Count);
+     if(total>MaxMessageBytes)tooLarge=true;
+     if(!tooLarge)body.Write(chunk,0,part.Count);
+    }while(!part.EndOfMessage);
+    if(tooLarge){if(oversized!=null)oversized(total);return null;}
+    return Encoding.UTF8.GetString(body.ToArray());
+   }
+  }
+  async Task Receive(ClientWebSocket ws){while(ws.State==WebSocketState.Open&&!cancel.IsCancellationRequested){
+   string payload=await ReadMessage(ws,cancel.Token,size=>AddReport("oversized_frame",new Dictionary<string,object>{{"bytes",size}}));
+   if(payload==null)continue;
+   long tick=MonotonicMs();var root=new JavaScriptSerializer().DeserializeObject(payload) as Dictionary<string,object>;
+   if(root==null)throw new FormatException("Invalid ally response");
+   Interlocked.Exchange(ref lastReceivedTick,tick);object accepted;health.Reply(tick,root.TryGetValue("ack",out accepted)?(long?)Convert.ToInt64(accepted):null);if(HandleFlowFrame(root))continue;
    long previous=Interlocked.Exchange(ref lastFrameTick,tick);if(previous>0){long gap=tick-previous;if(gap>Interlocked.Read(ref maxFrameGap))Interlocked.Exchange(ref maxFrameGap,gap);}
-   List<AllyPosition> peers=ParsePeers(payload,DateTime.UtcNow);Interlocked.Increment(ref receivedCount);if(!connectionConfirmed){connectionConfirmed=true;Report("Союзники: связь подтверждена · отчёт в настройках");}if(Updated!=null)Updated(peers);
+   List<AllyPosition> peers=ParsePeers(payload,DateTime.UtcNow);Interlocked.Increment(ref receivedCount);if(!connectionConfirmed){connectionConfirmed=true;lastFailure="";AddReport("connected",null);Report("Союзники: связь подтверждена · отчёт в настройках");}if(Updated!=null)Updated(peers);
   }}
   public static List<AllyPosition> ParsePeers(string payload,DateTime clientNow){
    var root=(Dictionary<string,object>)new JavaScriptSerializer().DeserializeObject(payload);string self=Convert.ToString(root["self"]);double now=Convert.ToDouble(root["now"]);List<AllyPosition> peers=new List<AllyPosition>();foreach(object raw in (object[])root["peers"]){var d=raw as Dictionary<string,object>;if(d==null||Convert.ToString(d["id"])==self)continue;double x=Convert.ToDouble(d["x"]),y=Convert.ToDouble(d["y"]);if(Double.IsNaN(x)||Double.IsNaN(y)||Math.Abs(x)>2000000||Math.Abs(y)>2000000)continue;string nick=Convert.ToString(d["nick"]);peers.Add(new AllyPosition{Id=Convert.ToString(d["id"]),Nick=nick.Length>32?nick.Substring(0,32):nick,X=x,Y=y,HasHeading=d["heading"]!=null,Heading=d["heading"]==null?0:Convert.ToDouble(d["heading"]),SourceAt=Convert.ToInt64(d["at"]),Observed=clientNow.AddMilliseconds(-Math.Max(0,Math.Min(86400000,now-Convert.ToDouble(d["at"]))))});}return peers;
@@ -121,8 +146,9 @@ namespace ScumPositionProbe {
    try{
     foreach(string id in new string[]{"a","b"}){var h=new HubClient();hubs.Add(h);var live=new AllyLive(h){SendingAllowed=true};int connects=0;string own=id;live.SocketUri=()=>new Uri(endpoint+"&id="+own+"&drop="+(++connects==1?"1":"0"));clients.Add(live);live.Start();}
     for(int i=0;i<220;i++){foreach(var live in clients)live.Observe(new Position{X=i*100,Y=100,Z=0},0);await Task.Delay(100);}
+    await Task.Delay(1200);
     var lines=new List<string>();foreach(var live in clients){long frames=Interlocked.Read(ref live.receivedCount),reconnects=Interlocked.Read(ref live.reconnectCount),ack=live.health.Acknowledged;string report=live.DiagnosticReport();
-     if(frames<90||ack<190||reconnects!=2||!report.Contains("\"kind\":\"server\"")||Interlocked.Read(ref live.maxFrameGap)>5500)throw new Exception("Network recovery failed: frames="+frames+" ack="+ack+" reconnects="+reconnects+" gap="+live.maxFrameGap);
+     if(frames<90||ack<220||reconnects!=2||!report.Contains("\"kind\":\"server\"")||!report.Contains("\"kind\":\"oversized_frame\"")||Interlocked.Read(ref live.maxFrameGap)>11000)throw new Exception("Network recovery failed: frames="+frames+" ack="+ack+" reconnects="+reconnects+" gap="+live.maxFrameGap);
      lines.Add("PASS frames="+frames+" acknowledgedRevision="+ack+" connections="+reconnects+" maxGapMs="+live.maxFrameGap);
     }System.IO.File.WriteAllLines("network-test.txt",lines);
    }finally{foreach(var live in clients)live.Dispose();foreach(var h in hubs)h.Dispose();}

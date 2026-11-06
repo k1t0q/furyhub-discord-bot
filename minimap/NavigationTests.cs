@@ -22,6 +22,7 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   AllyTransportTests.Run(results);
    if(!String.IsNullOrEmpty(Environment.GetEnvironmentVariable("SCUM_NETWORK_PROBE")))AllyLive.NetworkTest().GetAwaiter().GetResult();
    StaticPoiLayer poi=new StaticPoiLayer(false);Check(poi.Visible.Count==77,"built-in POI catalog count");
    int[] expectedPoi={20,4,8,3,42};for(int i=0;i<StaticPoiLayer.Categories.Length;i++)Check(poi.Count(StaticPoiLayer.Categories[i])==expectedPoi[i],"POI category counts");
@@ -59,13 +60,14 @@ namespace ScumPositionProbe {
    DateTime noticeNow=DateTime.UtcNow,noticeUntil=noticeNow.AddSeconds(2);Check(MapZoom.NoticeOpacity(noticeUntil,noticeNow)==1&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(1.8))>0&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(2))==0,"zoom badge expires after two seconds");
    results.Add("PASS fixed 200m zoom steps, saved values, limits and two-second badge");
    var link=new AllyLinkHealth();link.Reset(100);link.Sent(1,200);link.Reply(250,0);
-   Check(!link.TimedOut(2699)&&link.TimedOut(2700),"unacknowledged writes expire even while socket accepts sends");
+   Check(!link.TimedOut(8199)&&link.TimedOut(8200),"unacknowledged writes expire even while socket accepts sends");
    link.Reset(100);link.Sent(1,200);link.Reply(250,0);link.Reply(1000,0);link.Reply(2000,0);
-   Check(link.TimedOut(2700),"heartbeats cannot hide stopped position acceptance");
+   Check(link.TimedOut(8200),"heartbeats cannot hide stopped position acceptance");
    link.Reset(100);link.Sent(1,200);link.Reply(300,1);link.Sent(2,400);link.Reply(500,2);
    Check(!link.TimedOut(2999)&&link.Acknowledged==2,"real acknowledgements keep moving connection alive");
    link.Reset(5000);link.Sent(2,5100);link.Reply(5200,2);Check(!link.TimedOut(5300),"latest revision can be resent after reconnect");
-   link.Reset(100);link.Reply(1000,null);Check(!link.TimedOut(3499)&&link.TimedOut(3500),"older server remains supported with reply watchdog");
+   link.Reset(100);link.Reply(1000,null);Check(!link.TimedOut(8999)&&link.TimedOut(9000),"older server remains supported with reply watchdog");
+   link.Reset(100);link.Sent(1,200);link.Reply(300,0);link.Reply(3100,1);Check(!link.TimedOut(3200),"temporary three-second jitter does not force reconnect");
    results.Add("PASS delivery acknowledgement watchdog, stalled writes, heartbeat-only stall and reconnect reset");
    AllyMotion motion=new AllyMotion();DateTime renderNow=DateTime.UtcNow;
    var firstAlly=new AllyPosition{Id="friend",Nick="Friend",X=100,Y=200,Heading=350,HasHeading=true,Observed=renderNow,SourceAt=1};
