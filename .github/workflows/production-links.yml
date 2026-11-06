@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           cp verified-release/SCUM_HUB_MiniMap_V1.5.exe minimap/SCUM_HUB_MiniMap.exe
-          sha256sum minimap/SCUM_HUB_MiniMap.exe
+          echo 'ae659c875c40a8caf7ee98340575f8d58150dee381173db7056303251a40e853  minimap/SCUM_HUB_MiniMap.exe' | sha256sum --check
           node --check src/server.js
       - name: Deploy menu and executable
         env:
