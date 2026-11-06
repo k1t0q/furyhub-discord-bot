@@ -1,0 +1,57 @@
+name: Build mini-map V1.4 live recovery
+on:
+  push:
+    branches: [feature/minimap-live-v1.4]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mono-mcs libmono-system-windows-forms4.0-cil libmono-system-net-http4.0-cil libmono-system-web-extensions4.0-cil python3-pil python3-numpy python3-scipy fonts-dejavu-core xvfb libgdiplus
+          python3 minimap/build-map.py
+          python3 minimap/build-road-graph.py
+          python3 minimap/build-windows.py
+          cd minimap
+          mono SCUM_HUB_MiniMap.exe --self-test
+          xvfb-run -a mono SCUM_HUB_MiniMap.exe --ui-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minimap-v1.4-exe
+          path: minimap/SCUM_HUB_MiniMap.exe
+  windows-ui:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: minimap-v1.4-exe
+      - name: Check Windows UI
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ./SCUM_HUB_MiniMap.exe -ArgumentList '--ui-test' -Wait -PassThru
+          Get-Content ui-test.txt
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+      - name: Test real Windows WebSocket recovery
+        shell: pwsh
+        env:
+          SCUM_NETWORK_PROBE: wss://minimap-network-probe.nikitinrf.workers.dev/?key=wlsYGQO3gcZJBPMyDPJmQ8SdmXfg6YTbx4lRrby5ks4
+        run: |
+          $process = Start-Process -FilePath ./SCUM_HUB_MiniMap.exe -ArgumentList '--self-test' -Wait -PassThru
+          Get-Content network-test.txt
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: minimap-v1.4-ui
+          path: |
+            ui-preview-*.png
+            ui-test.txt
+            network-test.txt

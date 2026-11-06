@@ -22,6 +22,7 @@ namespace ScumPositionProbe {
    }
   }
   public static void Run(List<string> results){
+   if(!String.IsNullOrEmpty(Environment.GetEnvironmentVariable("SCUM_NETWORK_PROBE")))AllyLive.NetworkTest().GetAwaiter().GetResult();
    StaticPoiLayer poi=new StaticPoiLayer(false);Check(poi.Visible.Count==77,"built-in POI catalog count");
    int[] expectedPoi={20,4,8,3,42};for(int i=0;i<StaticPoiLayer.Categories.Length;i++)Check(poi.Count(StaticPoiLayer.Categories[i])==expectedPoi[i],"POI category counts");
    foreach(HubMarker marker in poi.Visible){Check(StaticPoiLayer.IsStatic(marker)&&!HubClient.CanRefreshStash(marker),"built-in objects cannot be refreshed as squad stashes");Check(marker.Name.Contains(" "+MapMath.Sector(marker.X,marker.Y)),"all built-in labels contain their sector");Check(marker.Id.StartsWith("poi-")&&marker.X>=0&&marker.X<=1&&marker.Y>=0&&marker.Y<=1,"static POI identity and location");}
@@ -57,6 +58,15 @@ namespace ScumPositionProbe {
    Check(MapZoom.Snap(750)==700&&MapZoom.Snap(150)==100&&MapZoom.Snap(7600)==7500,"legacy saved zoom snaps to fixed steps");
    DateTime noticeNow=DateTime.UtcNow,noticeUntil=noticeNow.AddSeconds(2);Check(MapZoom.NoticeOpacity(noticeUntil,noticeNow)==1&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(1.8))>0&&MapZoom.NoticeOpacity(noticeUntil,noticeNow.AddSeconds(2))==0,"zoom badge expires after two seconds");
    results.Add("PASS fixed 200m zoom steps, saved values, limits and two-second badge");
+   var link=new AllyLinkHealth();link.Reset(100);link.Sent(1,200);link.Reply(250,0);
+   Check(!link.TimedOut(2699)&&link.TimedOut(2700),"unacknowledged writes expire even while socket accepts sends");
+   link.Reset(100);link.Sent(1,200);link.Reply(250,0);link.Reply(1000,0);link.Reply(2000,0);
+   Check(link.TimedOut(2700),"heartbeats cannot hide stopped position acceptance");
+   link.Reset(100);link.Sent(1,200);link.Reply(300,1);link.Sent(2,400);link.Reply(500,2);
+   Check(!link.TimedOut(2999)&&link.Acknowledged==2,"real acknowledgements keep moving connection alive");
+   link.Reset(5000);link.Sent(2,5100);link.Reply(5200,2);Check(!link.TimedOut(5300),"latest revision can be resent after reconnect");
+   link.Reset(100);link.Reply(1000,null);Check(!link.TimedOut(3499)&&link.TimedOut(3500),"older server remains supported with reply watchdog");
+   results.Add("PASS delivery acknowledgement watchdog, stalled writes, heartbeat-only stall and reconnect reset");
    AllyMotion motion=new AllyMotion();DateTime renderNow=DateTime.UtcNow;
    var firstAlly=new AllyPosition{Id="friend",Nick="Friend",X=100,Y=200,Heading=350,HasHeading=true,Observed=renderNow,SourceAt=1};
    Check(motion.Render(firstAlly,renderNow).X==100,"ally begins at exact coordinate");
