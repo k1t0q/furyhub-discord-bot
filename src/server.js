@@ -8,7 +8,7 @@ import http from 'node:http';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, copyFileSync } from 'node:fs';
-const minimapDownloadName='SCUM_HUB_MiniMap_V1.3.exe';
+const minimapDownloadName='SCUM_HUB_MiniMap_V1.4.exe';
 const minimapPath=new URL('../minimap/SCUM_HUB_MiniMap.exe',import.meta.url);
 try{copyFileSync('/tmp/SCUM_HUB_MiniMap.exe',minimapPath);}catch{}
 import { verifyKey, InteractionType, InteractionResponseType } from 'discord-interactions';
