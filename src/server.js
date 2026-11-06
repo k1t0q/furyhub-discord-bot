@@ -1,3 +1,4 @@
+import {coordinateChannelId,coordinateChannelNotice,createCoordinateChannelRouter} from './coordinate-channel.js';
 import {createMinimapAnnouncements,renderScumMapPreview} from './minimap-announcements.js';
 import {warehousePanel, warehouseModal, saveWarehouse} from './warehouse.js';
 import {queueMigrationReminders} from './migration-reminders.js';
@@ -386,7 +387,7 @@ async function handle(interaction) {
   const mapDecision=String(interaction.data?.custom_id||'').match(/^fury:map-(yes|no|kind-(?:stash|car|enemy|other)):(\d{15,22})$/);
   if(interaction.type===InteractionType.MESSAGE_COMPONENT && mapDecision){
     const caller=String(interaction.member?.user?.id||interaction.user?.id||'');
-    if(!mapImportChannelIds.has(interaction.channel_id)||interaction.guild_id!==allowedGuild)return ephem('Недоступный канал.');
+    if(!mapImportChannelIds.has(interaction.channel_id)||interaction.guild_id!==allowedGuild)return ephem(coordinateChannelNotice);
     const original=await fetch('https://discord.com/api/v10/channels/'+interaction.channel_id+'/messages/'+mapDecision[2],{
       headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},signal:AbortSignal.timeout(7000)
     });
@@ -1040,7 +1041,7 @@ async function syncProtectVoiceChannel(label){
 }
 
 // Import ordinary markers posted by linked members in one Discord channel.
-const mapImportChannelIds = new Set(['1544399727653691395','1552235129827762276','1559556564208066590','1553351923774783578']);
+const mapImportChannelIds = new Set([coordinateChannelId]);
 const mapImportSeen = new Set();
 const mapScreenshotCoords = new Map();
 // Install the map reference via an administrator's Discord attachment, no SSH file transfer needed.
@@ -1107,6 +1108,16 @@ async function recognizeDiscordMapScreenshot(message) {
     await importDiscordMapMessage(augmented,false);
   } finally {await rm(folder,{recursive:true,force:true})}
 }
+
+const routeCoordinateMessage=createCoordinateChannelRouter({guildId:allowedGuild,
+ handleAllowed:async message=>{if(!await installDiscordMapReference(message))await importDiscordMapMessage(message);},
+ sendNotice:async(message,content)=>{
+  const response=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+'/messages',{
+   method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+   body:JSON.stringify({content,message_reference:{message_id:message.id,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false},allowed_mentions:{parse:[]}}),signal:AbortSignal.timeout(7000)});
+  if(!response.ok)throw Error('Coordinate channel notice HTTP '+response.status);
+ }
+});
 
 async function importDiscordMapMessage(message, confirmed=false, confirmationMessageId=null, markerType='other') {
   if (!message || !mapImportChannelIds.has(message.channel_id) || message.guild_id !== allowedGuild || message.author?.bot) return;
@@ -1227,7 +1238,7 @@ function startDiscordGateway() {
       }
       if(packet.op===1 && socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({op:1,d:sequence}));
       if(packet.op===7 || packet.op===9)socket.close();
-      if(packet.t==='MESSAGE_CREATE' && mapImportChannelIds.has(packet.d?.channel_id)) void (async()=>{if(!await installDiscordMapReference(packet.d))await importDiscordMapMessage(packet.d);})().catch(err=>console.error('[discord] Map import:',err.message));
+      if(packet.t==='MESSAGE_CREATE')void routeCoordinateMessage(packet.d).catch(err=>console.error('[discord] Map import:',err.message));
       if(packet.t==='MESSAGE_CREATE')void receivePlaceScreenshot(packet.d).catch(async err=>{
         console.error('[discord] Screenshot:',err.message);
         if(packet.d?.author?.id)await discordSendTextDM(packet.d.author.id,'Не удалось сохранить запись. Попробуй ещё раз. Если ошибка повторится, отправь администратору логи Layero с пометкой [discord] Screenshot.');
