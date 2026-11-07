@@ -7,20 +7,27 @@ import numpy as np
 BOUNDS=(420,0,1500,1080)
 def dots(img):
     hsv=cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-    mask=cv2.inRange(hsv,(0,125,110),(12,255,255))|cv2.inRange(hsv,(170,125,110),(179,255,255))
+    mask=cv2.inRange(hsv,(0,105,100),(15,255,255))|cv2.inRange(hsv,(170,105,100),(179,255,255))
     n,_,stats,centres=cv2.connectedComponentsWithStats(mask)
     found=[]
     for k in range(1,n):
         x,y,w,h,area=map(int,stats[k])
-        if not (20<=area<=2600 and .7<w/max(h,1)<1.4 and 5<=w<=65 and 5<=h<=65):continue
-        cx,cy=map(float,centres[k]);rim=[]
-        for a in np.linspace(0,2*np.pi,24,endpoint=False):
-            px=int(round(cx+max(w,h)*.55*np.cos(a)));py=int(round(cy+max(w,h)*.55*np.sin(a)))
-            if 0<=px<img.shape[1] and 0<=py<img.shape[0]:
-                hsvpx=hsv[py,px];rim.append(int(hsvpx[1])<90 and int(hsvpx[2])>175)
-        score=float(np.mean(rim)) if rim else 0
-        if score>=.80:found.append((cx,cy,score))
-    return found
+        if not (15<=area<=6500 and .70<w/max(h,1)<1.43 and 5<=w<=110 and 5<=h<=110):continue
+        cx,cy=map(float,centres[k])
+        # The white rim is outside the red component. Test multiple radii to
+        # tolerate Discord resizing, antialiasing and different map zoom levels.
+        best=0.0
+        for radius in (.50,.56,.62,.68):
+            rim=[]
+            for a in np.linspace(0,2*np.pi,32,endpoint=False):
+                px=int(round(cx+max(w,h)*radius*np.cos(a)))
+                py=int(round(cy+max(w,h)*radius*np.sin(a)))
+                if 0<=px<img.shape[1] and 0<=py<img.shape[0]:
+                    hpx=hsv[py,px]
+                    rim.append(int(hpx[1])<115 and int(hpx[2])>160)
+            if len(rim)>=24:best=max(best,float(np.mean(rim)))
+        if best>=.70:found.append((cx,cy,best))
+    return sorted(found,key=lambda item:item[2],reverse=True)
 def locate(img,reference):
     x0,y0,x1,y1=BOUNDS
     base=reference[y0:y1,x0:x1]
@@ -35,7 +42,7 @@ def locate(img,reference):
     inliers=int(m.sum()) if m is not None else 0
     if H is None or inliers<18 or inliers/len(good)<.75:return {'status':'weak_alignment'}
     candidates=dots(img)
-    if len(candidates)!=1:return {'status':'ambiguous_red_dots','candidates':len(candidates)}
+    if len(candidates)!=1:return {'status':'ambiguous_red_dots','candidates':len(candidates),'best_rim':round(candidates[0][2],2) if candidates else 0}
     cx,cy,score=candidates[0]
     p=cv2.perspectiveTransform(np.float32([[[cx,cy]]]),H)[0,0]
     nx,ny=float(p[0]/base.shape[1]),float(p[1]/base.shape[0])
