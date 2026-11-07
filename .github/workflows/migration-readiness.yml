@@ -2,7 +2,7 @@ name: Deploy Discord D1 migration
 on:
   push:
     branches: [scum-hub-migration]
-    paths: ['.github/workflows/migration-readiness.yml', 'src/**', 'tests/**', 'package.json', 'package-lock.json']
+    paths: ['.github/workflows/migration-readiness.yml', 'src/**', 'scripts/**', 'tests/**', 'package.json', 'package-lock.json']
   workflow_dispatch:
 concurrency:
   group: discord-d1-migration-deploy
