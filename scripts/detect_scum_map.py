@@ -26,8 +26,8 @@ def dots(img):
                     hpx=hsv[py,px]
                     rim.append(int(hpx[1])<115 and int(hpx[2])>160)
             if len(rim)>=24:best=max(best,float(np.mean(rim)))
-        if best>=.70:found.append((cx,cy,best))
-    return sorted(found,key=lambda item:item[2],reverse=True)
+        if best>=.70:found.append((cx,cy,best,area))
+    return sorted(found,key=lambda item:(item[3],item[2]),reverse=True)
 def locate(img,reference):
     x0,y0,x1,y1=BOUNDS
     base=reference[y0:y1,x0:x1]
@@ -42,8 +42,14 @@ def locate(img,reference):
     inliers=int(m.sum()) if m is not None else 0
     if H is None or inliers<18 or inliers/len(good)<.75:return {'status':'weak_alignment'}
     candidates=dots(img)
-    if len(candidates)!=1:return {'status':'ambiguous_red_dots','candidates':len(candidates),'best_rim':round(candidates[0][2],2) if candidates else 0}
-    cx,cy,score=candidates[0]
+    # A user pin is a filled red disc with a strong white ring. Roads and
+    # colored map overlays also create red components, but are much smaller
+    # or have an incomplete rim. Choose a dominant pin only when unambiguous.
+    strong=[c for c in candidates if c[2]>=.85 and c[3]>=max(90, img.shape[1]*img.shape[0]*.00005)]
+    strong.sort(key=lambda c:c[3],reverse=True)
+    if not strong or (len(strong)>1 and strong[0][3]<strong[1][3]*1.8):
+        return {'status':'ambiguous_red_dots','candidates':len(candidates),'strong_candidates':len(strong),'largest_area':strong[0][3] if strong else 0}
+    cx,cy,score,_=strong[0]
     p=cv2.perspectiveTransform(np.float32([[[cx,cy]]]),H)[0,0]
     nx,ny=float(p[0]/base.shape[1]),float(p[1]/base.shape[0])
     if not (0<=nx<=1 and 0<=ny<=1):return {'status':'outside_map'}
