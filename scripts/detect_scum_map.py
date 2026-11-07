@@ -12,7 +12,7 @@ def dots(img):
     found=[]
     for k in range(1,n):
         x,y,w,h,area=map(int,stats[k])
-        if not (35<=area<=330 and .7<w/max(h,1)<1.4 and 6<=w<=25 and 6<=h<=25):continue
+        if not (20<=area<=2600 and .7<w/max(h,1)<1.4 and 5<=w<=65 and 5<=h<=65):continue
         cx,cy=map(float,centres[k]);rim=[]
         for a in np.linspace(0,2*np.pi,24,endpoint=False):
             px=int(round(cx+max(w,h)*.55*np.cos(a)));py=int(round(cy+max(w,h)*.55*np.sin(a)))
