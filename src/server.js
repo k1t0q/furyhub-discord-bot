@@ -1083,21 +1083,30 @@ async function installDiscordMapReference(message){
 }
 async function recognizeDiscordMapScreenshot(message) {
   const photo=(message.attachments||[]).find(a=>/^image\/(?:png|jpeg|webp)$/i.test(a.content_type||'') || /\.(?:png|jpe?g|webp)$/i.test(a.filename||''));
-  if (!photo || (photo.size && photo.size>10*1024*1024)) return;
+  if (!photo) return;
+  const report=async content=>{
+    const response=await fetch('https://discord.com/api/v10/channels/'+message.channel_id+'/messages',{
+      method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({content,message_reference:{message_id:message.id,channel_id:message.channel_id,guild_id:message.guild_id,fail_if_not_exists:false},allowed_mentions:{parse:[]}}),signal:AbortSignal.timeout(8000)
+    });
+    if(!response.ok)console.error('[discord] Map screenshot notice failed:',response.status);
+  };
+  if(photo.size && photo.size>10*1024*1024){await report('⚠️ Фото карты больше 10 МБ. Отправь изображение меньшего размера.');return;}
   const reference=process.env.SCUM_MAP_REFERENCE_PATH||'/opt/scum-hub-bot/map-detector/reference_map.png';
   const folder=await mkdtemp(join(tmpdir(),'scum-map-'));
   try {
     const response=await fetch(photo.url,{signal:AbortSignal.timeout(15000)});
     if(!response.ok)throw Error('Map screenshot download '+response.status);
     const bytes=Buffer.from(await response.arrayBuffer());
-    if(bytes.length>10*1024*1024)return;
+    if(bytes.length>10*1024*1024){await report('⚠️ Фото карты больше 10 МБ.');return;}
     const filepath=join(folder,'screenshot.png');
     await writeFile(filepath,bytes);
     const {stdout}=await execFileAsync(process.env.SCUM_MAP_PYTHON||'/opt/scum-hub-bot/.venv/bin/python',
-      ['scripts/detect_scum_map.py',reference,filepath],{cwd:process.cwd(),timeout:25000,maxBuffer:65536});
+      [new URL('../scripts/detect_scum_map.py',import.meta.url).pathname,reference,filepath],{timeout:25000,maxBuffer:65536});
     const result=JSON.parse(stdout.trim());
     if(result.status!=='detected'){
       console.log('[discord] Map screenshot unrecognized:',result.status);
+      await report('⚠️ Не удалось определить координаты по этому скриншоту карты SCUM. Проверь, что карта видна целиком, или отправь координаты текстом.');
       return;
     }
     // The sender must approve. Keep detected coordinates only until the prompt is resolved.
@@ -1106,6 +1115,9 @@ async function recognizeDiscordMapScreenshot(message) {
     mapScreenshotCoords.set(String(message.id),{content:augmented.content,attachmentId:String(photo.id||''),at:Date.now()});
     if(mapScreenshotCoords.size>500)mapScreenshotCoords.delete(mapScreenshotCoords.keys().next().value);
     await importDiscordMapMessage(augmented,false);
+  } catch(error){
+    console.error('[discord] Map screenshot recognition failed:',String(error?.message||error).slice(0,400));
+    await report('⚠️ Не удалось обработать фото карты. Проверь, что эталонная карта и распознаватель настроены на сервере. Можно отправить координаты текстом.');
   } finally {await rm(folder,{recursive:true,force:true})}
 }
 
