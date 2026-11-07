@@ -1106,7 +1106,8 @@ async function recognizeDiscordMapScreenshot(message) {
     const result=JSON.parse(stdout.trim());
     if(result.status!=='detected'){
       console.log('[discord] Map screenshot unrecognized:',result.status);
-      await report('⚠️ Не удалось определить координаты по этому скриншоту карты SCUM. Проверь, что карта видна целиком, или отправь координаты текстом.');
+      const reasons={no_features:'не удалось найти характерные детали карты',insufficient_matches:'недостаточно совпадений с эталонной картой',weak_alignment:'совпадения с эталоном ненадёжны',ambiguous_red_dots:'не найден один однозначный красный маркер',outside_map:'рассчитанная точка оказалась за пределами карты',error:'ошибка распознавателя'};
+      await report('⚠️ Не удалось определить координаты по фото. Причина: **'+(reasons[result.status]||'неизвестная ошибка')+'** (`'+String(result.status).slice(0,40)+'`).'+(Number.isFinite(result.matches)?' Совпадений: '+result.matches+'.':'')+(Number.isFinite(result.inliers)?' Подтверждено: '+result.inliers+'.':'')+(Number.isFinite(result.candidates)?' Красных маркеров: '+result.candidates+'.':'')+' Отправь этот ответ для диагностики.');
       return;
     }
     // The sender must approve. Keep detected coordinates only until the prompt is resolved.
