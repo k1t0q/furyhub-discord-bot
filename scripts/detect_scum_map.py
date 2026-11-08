@@ -45,7 +45,7 @@ def locate(img,reference):
     # A user pin is a filled red disc with a strong white ring. Roads and
     # colored map overlays also create red components, but are much smaller
     # or have an incomplete rim. Choose a dominant pin only when unambiguous.
-    strong=[c for c in candidates if c[2]>=.85 and c[3]>=max(90, img.shape[1]*img.shape[0]*.00005)]
+    strong=[c for c in candidates if c[2]>=.85 and c[3]>=max(60, img.shape[1]*img.shape[0]*.000025)]
     strong.sort(key=lambda c:c[3],reverse=True)
     if not strong or (len(strong)>1 and strong[0][3]<strong[1][3]*1.8):
         return {'status':'ambiguous_red_dots','candidates':len(candidates),'strong_candidates':len(strong),'largest_area':strong[0][3] if strong else 0}
