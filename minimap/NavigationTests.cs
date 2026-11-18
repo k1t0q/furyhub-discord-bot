@@ -43,17 +43,22 @@ namespace ScumPositionProbe {
    Check(inbox.Take(owner)[0].Nick=="9999"&&inbox.Take(owner)==null,"ally frame backlog is replaced by latest");
    inbox.Publish(new object(),new List<AllyPosition>());Check(inbox.Take(owner)==null,"old connection frame discarded");results.Add("PASS latest-only ally frame coalescing under ten thousand updates");
 
+   var movementKeys=new HashSet<int>{0x10,0x11,0x12,0x01,0x02,0x57,0x41,0x53,0x44};
+   Check(!ProbeForm.CopyInputBlocked(key=>movementKeys.Contains(key),0x79),"copy must be allowed while sprinting, crouching, aiming or moving");
+   Check(ProbeForm.CopyInputBlocked(key=>key==0x79,0x79)&&ProbeForm.CopyInputBlocked(key=>key==0x5B,0x79)&&ProbeForm.CopyInputBlocked(key=>key==0x5C,0x79),"copy key and Windows keys prevent duplicate injection");
+   results.Add("PASS continuous coordinate sampling while sprinting or aiming, with copy-key guard");
    DateTime presenceNow=new DateTime(2026,11,2,0,0,0,DateTimeKind.Utc);
    Check(AllyLive.Visible(presenceNow,presenceNow.AddSeconds(30))&&!AllyLive.Visible(presenceNow,presenceNow.AddMilliseconds(30001)),"ally hides after thirty seconds");
    using(HubClient presenceHub=new HubClient())using(AllyLive presence=new AllyLive(presenceHub)){
     DateTime sampleNow=presenceNow;presence.UtcNow=()=>sampleNow;Position stationary=new Position{X=100,Y=100};presence.Observe(stationary,0);long initial=presence.Revision;
-    sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary samples throttled");sampleNow=sampleNow.AddSeconds(3.999);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary confirmation waits five seconds");sampleNow=sampleNow.AddMilliseconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial+1,"fresh stationary samples confirm presence every five seconds");
+    sampleNow=sampleNow.AddSeconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary samples throttled");sampleNow=sampleNow.AddMilliseconds(999);presence.Observe(stationary,0);Check(presence.Revision==initial,"stationary confirmation waits two seconds");sampleNow=sampleNow.AddMilliseconds(1);presence.Observe(stationary,0);Check(presence.Revision==initial+1,"fresh stationary samples confirm presence every two seconds");
     sampleNow=sampleNow.AddSeconds(8);Check(presence.Revision==initial+1,"no confirmation without a newly observed coordinate");
-    for(int i=0;i<60;i++){sampleNow=sampleNow.AddSeconds(5);presence.Observe(stationary,0);Check(presence.Revision==initial+2+i,"stationary ambush presence remains confirmed");}
+    for(int i=0;i<150;i++){sampleNow=sampleNow.AddSeconds(2);presence.Observe(stationary,0);Check(presence.Revision==initial+2+i,"stationary ambush presence remains confirmed");}
     long beforeSilence=presence.Revision;sampleNow=sampleNow.AddMinutes(2);Check(presence.Revision==beforeSilence,"time alone cannot confirm position");
    }
-   Check(!AllyLive.Stale(presenceNow,presenceNow.AddSeconds(7))&&AllyLive.Stale(presenceNow,presenceNow.AddMilliseconds(7001)),"five-second stationary confirmations do not flash orange");
-   results.Add("PASS five-minute stationary ambush, five-second fresh confirmations, seven-second stale colour and thirty-second expiry");
+   Check(!AllyLive.Stale(presenceNow,presenceNow.AddSeconds(7))&&AllyLive.Stale(presenceNow,presenceNow.AddMilliseconds(7001)),"two-second stationary confirmations do not flash orange");
+   Check(AllyLive.FreshForDelivery(presenceNow,presenceNow.AddMilliseconds(650))&&!AllyLive.FreshForDelivery(presenceNow,presenceNow.AddSeconds(2)),"position delivery tolerates jitter beyond 300ms without sending stale samples");
+   results.Add("PASS five-minute stationary ambush, two-second fresh confirmations, delayed delivery and thirty-second expiry");
    Check(MapZoom.Next(100,false)==300&&MapZoom.Next(300,false)==500&&MapZoom.Next(500,false)==700&&MapZoom.Next(700,false)==900,"fixed zoom sequence");
    Check(MapZoom.Next(100,true)==100&&MapZoom.Next(7500,false)==7500&&MapZoom.Next(300,true)==100,"zoom direction and bounds");
    Check(MapZoom.Snap(750)==700&&MapZoom.Snap(150)==100&&MapZoom.Snap(7600)==7500,"legacy saved zoom snaps to fixed steps");
