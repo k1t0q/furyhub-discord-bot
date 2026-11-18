@@ -553,7 +553,10 @@ namespace ScumPositionProbe {
   }
   void Stop(string reason){if(live!=null)live.SendingAllowed=false;mini.MotionStatus="Остановлено";running=false;ReleaseKeys();phase=0;focusSince=-1;keyPicker.Enabled=interval.Enabled=mode.Enabled=true;toggle.Text="Старт · F8";if(log!=null){log.Dispose();log=null;}state.Text=reason;}
   bool IsGame(out uint pid,out IntPtr window){window=Native.GetForegroundWindow();Native.GetWindowThreadProcessId(window,out pid);if(pid==0)return false;try{using(Process p=Process.GetProcessById((int)pid)){return Native.IsScumName(p.ProcessName);}}catch{return false;}}
-  bool InputBusy(){int[] keys={0x10,0x11,0x12,0x5B,0x5C,0x01,0x02,copyKey};foreach(int k in keys)if(Native.Down(k))return true;return false;}
+  // Movement/sprint/aim inputs must not suspend coordinate polling. Never
+  // inject a second copy-key press while the user holds that key, though.
+  internal static bool CopyInputBlocked(Func<int,bool> down,ushort key){return down(key)||down(0x5B)||down(0x5C);}
+  bool InputBusy(){return CopyInputBlocked(Native.Down,copyKey);}
   void ReleaseKeys(){List<Native.INPUT> keys=new List<Native.INPUT>();if(keyOwned)keys.Add(Native.Key(ownedKey,true));if(ctrlOwned)keys.Add(Native.Key(0x11,true));if(keys.Count>0)Native.Send(keys.ToArray());keyOwned=ctrlOwned=false;}
   readonly ZoomKeys zoomKeys=new ZoomKeys();
   void UpdateZoomKeys(long now){uint pid;IntPtr window;bool allowed=!movingWindow&&mapWanted&&mini.Visible&&IsGame(out pid,out window)&&!Native.CursorVisible()&&!Native.Down(0x10)&&!Native.Down(0x11)&&!Native.Down(0x12);int direction=zoomKeys.Update(allowed,Native.Down(0x26),Native.Down(0x28),now);if(direction!=0)mini.ChangeZoom(direction>0);}
@@ -575,11 +578,11 @@ namespace ScumPositionProbe {
    if(phase==2){if(pid!=gamePid||window!=gameWindow){phase=0;return;}if(Native.GetClipboardSequenceNumber()!=oldSequence){
      try{if(Clipboard.ContainsText(TextDataFormat.UnicodeText)){string text=Clipboard.GetText(TextDataFormat.UnicodeText);Position pos;if(Position.TryParse(text,out pos)){Record(pos);phase=0;return;}}}catch(ExternalException){}
     }if(now>=clipboardUntil){timeouts++;phase=0;state.Text="Нет свежих координат. Проверь назначение клавиш и закрой чат/меню.";}return;}
-   if(now<nextAttempt)return;if(InputBusy()){blocked++;nextAttempt=now+150;state.Text="Жду отпускания Shift / Ctrl / Alt / мыши.";return;}
+   if(now<nextAttempt)return;if(InputBusy()){blocked++;nextAttempt=now+150;state.Text="Жду отпускания клавиши копирования / Win.";return;}
    if(!IsGame(out pid,out window))return;
    gamePid=pid;gameWindow=window;oldSequence=Native.GetClipboardSequenceNumber();ownedKey=copyKey;
    List<Native.INPUT> down=new List<Native.INPUT>();down.Add(Native.Key(ownedKey,false));keyOwned=true;
-   attempts++;nextAttempt=now+100;
+   attempts++;nextAttempt=now+(long)interval.Value;
    if(!Native.Send(down.ToArray())){ReleaseKeys();Stop("Windows отклонила ввод. Режим остановлен.");return;}
    phase=1;keyUpAt=now+45;state.Text="Запрос координат… F9 — остановить.";
   }

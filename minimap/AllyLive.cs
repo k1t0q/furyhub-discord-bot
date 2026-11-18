@@ -74,9 +74,13 @@ namespace ScumPositionProbe {
   internal Func<DateTime> UtcNow=()=>DateTime.UtcNow;
   public static bool Visible(DateTime observed,DateTime now){return (now-observed).TotalSeconds<=30;}
   public static bool Stale(DateTime observed,DateTime now){return (now-observed).TotalSeconds>7;}
+  // Keep the presence confirmation comfortably inside the server's short
+  // inactive window; this must still be backed by a new game clipboard sample.
+  internal const int StationaryConfirmMs=2000;
+  internal static bool FreshForDelivery(DateTime observed,DateTime now){double age=(now-observed).TotalMilliseconds;return age>=0&&age<2000;}
   internal long Revision{get{lock(gate)return revision;}}
   public static bool Changed(Position before,Position after,double? beforeHeading,double? afterHeading){return before==null||Math.Abs(before.X-after.X)>.5||Math.Abs(before.Y-after.Y)>.5||Math.Abs(before.Z-after.Z)>.5||beforeHeading.HasValue!=afterHeading.HasValue||(beforeHeading.HasValue&&Math.Abs(MapMath.DeltaAngle(beforeHeading.Value,afterHeading.Value))>.25);}
-  public void Observe(Position p,double north){Interlocked.Increment(ref sampleCount);Interlocked.Exchange(ref lastSampleTick,MonotonicMs());double? heading=p.HasYaw?(double?)MapMath.NormalizeAngle(p.Yaw-north):null;lock(gate){if(!Changed(previousSample,p,previousHeading,heading)&&(UtcNow()-observed).TotalSeconds<5)return;previousSample=p;previousHeading=heading;}double age=0;Dictionary<string,object> d=new Dictionary<string,object>();d["x"]=p.X;d["y"]=p.Y;d["z"]=p.Z;d["heading"]=p.HasYaw?(object)MapMath.NormalizeAngle(p.Yaw-north):null;d["age"]=age;lock(gate){lastPacket=new JavaScriptSerializer().Serialize(d);observed=UtcNow();revision++;}}
+  public void Observe(Position p,double north){Interlocked.Increment(ref sampleCount);Interlocked.Exchange(ref lastSampleTick,MonotonicMs());double? heading=p.HasYaw?(double?)MapMath.NormalizeAngle(p.Yaw-north):null;lock(gate){if(!Changed(previousSample,p,previousHeading,heading)&&(UtcNow()-observed).TotalMilliseconds<StationaryConfirmMs)return;previousSample=p;previousHeading=heading;}double age=0;Dictionary<string,object> d=new Dictionary<string,object>();d["x"]=p.X;d["y"]=p.Y;d["z"]=p.Z;d["heading"]=p.HasYaw?(object)MapMath.NormalizeAngle(p.Yaw-north):null;d["age"]=age;lock(gate){lastPacket=new JavaScriptSerializer().Serialize(d);observed=UtcNow();revision++;}}
   DateTime observed;
   internal int HeartbeatMs=1000,SendTimeoutMs=2500;
   long lastReceivedTick,lastSampleTick,sampleCount,sentCount,receivedCount,reconnectCount,nextDiagnostic;string lastFailure="";bool connectionConfirmed;
@@ -96,7 +100,7 @@ namespace ScumPositionProbe {
      if(receive.IsCompleted){await receive;break;}
      if(health.TimedOut(MonotonicMs()))throw new TimeoutException("Ally delivery acknowledgement timed out");
      string packet=null;long sendingRevision=0;
-     if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&((revision!=sentRevision&&(DateTime.UtcNow-observed).TotalMilliseconds<300)||(sentRevision>health.Acknowledged&&MonotonicMs()-lastPositionSend>=750))){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["seq"]=sendingRevision;d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}
+     if(!Sharing){if(wasSharing)packet="{\"off\":true}";}else{lock(gate){if(SendingAllowed&&lastPacket!=null&&((revision!=sentRevision&&FreshForDelivery(observed,DateTime.UtcNow))||(sentRevision>health.Acknowledged&&MonotonicMs()-lastPositionSend>=750))){sendingRevision=revision;var d=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(lastPacket);d["seq"]=sendingRevision;d["age"]=Math.Min(86400000,Math.Max(0,(DateTime.UtcNow-observed).TotalMilliseconds));packet=new JavaScriptSerializer().Serialize(d);}}}
      wasSharing=Sharing;
      if(packet!=null){await Send(ws,packet);if(sendingRevision>0){lastPositionSend=MonotonicMs();health.Sent(sendingRevision,lastPositionSend);Interlocked.Increment(ref positionSent);lock(gate){sentRevision=sendingRevision;}}}
      if(MonotonicMs()-lastHeartbeat>=HeartbeatMs){await Send(ws,"{\"ping\":true}");lastHeartbeat=MonotonicMs();}
