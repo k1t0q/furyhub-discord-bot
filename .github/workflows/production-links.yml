@@ -1,5 +1,5 @@
 name: Build mini-map and update Discord
-# Approved release v1.5: bounded diagnostic messages and reliable position delivery
+# Approved release v1.6: continuous movement sampling and stationary presence
 on:
   push:
     branches: [scum-hub-migration]
@@ -18,15 +18,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: SCUM_HUB_MiniMap_V1.5
-          run-id: 42296495859
+          name: SCUM_HUB_MiniMap_V1.6
+          run-id: 44369077347
           github-token: ${{ github.token }}
           path: verified-release
       - name: Prepare Windows-tested release
         run: |
           set -euo pipefail
-          cp verified-release/SCUM_HUB_MiniMap_V1.5.exe minimap/SCUM_HUB_MiniMap.exe
-          echo 'ae659c875c40a8caf7ee98340575f8d58150dee381173db7056303251a40e853  minimap/SCUM_HUB_MiniMap.exe' | sha256sum --check
+          cp verified-release/SCUM_HUB_MiniMap_V1.6.exe minimap/SCUM_HUB_MiniMap.exe
+          echo '7baed6728a878a763b234cf8b9e32d273614bd6e2f6cf192383ba7b7b2578ca4  minimap/SCUM_HUB_MiniMap.exe' | sha256sum --check
           node --check src/server.js
       - name: Deploy menu and executable
         env:
@@ -45,4 +45,4 @@ jobs:
           scp -i ~/.ssh/migration_key -P "$PORT" minimap/SCUM_HUB_MiniMap.exe "$SSH_USER@$SSH_HOST:/tmp/SCUM_HUB_MiniMap.exe"
           ssh -i ~/.ssh/migration_key -p "$PORT" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'set -eu; test -s /tmp/SCUM_HUB_MiniMap.exe; chmod 644 /tmp/SCUM_HUB_MiniMap.exe; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration prepare; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration activate; sleep 3; curl -fsS --retry 5 --retry-delay 3 --max-time 30 http://127.0.0.1:3000/health; sudo -n /usr/local/sbin/deploy-scum-hub-bot-migration status; minimap_bot_dir=$(systemctl show scum-hub-bot -p WorkingDirectory --value); test -n "$minimap_bot_dir"; cmp /tmp/SCUM_HUB_MiniMap.exe "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"; sha256sum "$minimap_bot_dir/minimap/SCUM_HUB_MiniMap.exe"'
 
-# Publish Windows-tested v1.5 through the existing Discord menu.
+# Publish Windows-tested v1.6 through the existing Discord menu.
